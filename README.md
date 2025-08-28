@@ -222,6 +222,10 @@ This ComfyUI wrapper is released under the MIT License. See LICENSE file for det
 - VibeVoice is for research purposes only
 - Check Microsoft's VibeVoice repository for full model license details
 
+## Links
+
+- [Original VibeVoice Repository](https://github.com/microsoft/VibeVoice) - Official Microsoft VibeVoice repository
+
 ## Credits
 
 - **VibeVoice Model**: Microsoft Research
