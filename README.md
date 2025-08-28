@@ -13,7 +13,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 
 ## Video Demo
 <div align="center">
-(https://www.youtube.com/watch?v=fIBMepIBKhI)
+[![VibeVoice ComfyUI Wrapper Demo](https://img.youtube.com/vi/fIBMepIBKhI/maxresdefault.jpg)](https://www.youtube.com/watch?v=fIBMepIBKhI)
 
 **Click to watch the demo video**
 </div>
