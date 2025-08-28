@@ -119,7 +119,7 @@ To clone a voice:
 
 **Requirements for voice samples:**
 - Clear audio with minimal background noise
-- Minimum 3–10 seconds. We recommend at least 30 seconds for better quality
+- Minimum 3–10 seconds. Recommended at least 30 seconds for better quality
 - Automatically resampled to 24kHz
 
 ## Tips for Best Results
