@@ -11,6 +11,13 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 🔧 **Flexible Configuration**: Control temperature, sampling, and guidance scale
 - 🚀 **Two Model Options**: 1.5B (faster) and 7B (higher quality)
 
+## Video Demo
+<div align="center">
+[![VibeVoice ComfyUI Wrapper Demo]([https://img.youtube.com/vi/fIBMepIBKhI/0.jpg](https://img.youtube.com/vi/fIBMepIBKhI/maxresdefault.jpg))](https://www.youtube.com/watch?v=fIBMepIBKhI)
+
+**Click to watch the demo video**
+</div>
+
 ## Installation
 
 ### Automatic Installation (Recommended)
