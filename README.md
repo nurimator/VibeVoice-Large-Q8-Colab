@@ -17,7 +17,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 1. Clone this repository into your ComfyUI custom nodes folder:
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/yourusername/VibeVoiceWrapper
+git clone https://github.com/Enemyx-net/VibeVoice-ComfyUI
 ```
 
 2. Restart ComfyUI - the nodes will automatically install VibeVoice on first use
