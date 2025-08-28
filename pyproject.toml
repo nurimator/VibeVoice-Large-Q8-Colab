@@ -1,0 +1,9 @@
+[project]
+name = "VibeVoice-ComfyUI"
+version = "1.0.1"
+description = "ComfyUI wrapper for Microsoft VibeVoice TTS model. Supports single speaker, multi-speaker, and text file loading"
+authors = [{name = "Fabio Sarracino"}]
+
+[project.urls]
+Repository = "https://github.com/Enemyx-net/VibeVoice-ComfyUI"
+Issues = "https://github.com/Enemyx-net/VibeVoice-ComfyUI/issues"
