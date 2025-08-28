@@ -233,6 +233,12 @@ class BaseVibeVoiceNode:
     
     def _format_text_for_vibevoice(self, text: str, speakers: list) -> str:
         """Format text with speaker information for VibeVoice using correct format"""
+        # Remove any newlines from the text to prevent parsing issues
+        # The processor splits by newline and expects each line to have "Speaker N:" format
+        text = text.replace('\n', ' ').replace('\r', ' ')
+        # Clean up multiple spaces
+        text = ' '.join(text.split())
+        
         # VibeVoice expects format: "Speaker 1: text" not "Name: text"
         if len(speakers) == 1:
             return f"Speaker 1: {text}"

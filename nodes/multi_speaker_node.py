@@ -97,13 +97,40 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 else:
                     # No speaker format found
                     speakers_in_text = [1]
-                    converted_text = f"Speaker 0: {text}"
+                    # Clean up newlines before assigning to speaker
+                    text_clean = text.replace('\n', ' ').replace('\r', ' ')
+                    text_clean = ' '.join(text_clean.split())
+                    converted_text = f"Speaker 0: {text_clean}"
             else:
-                # Convert [N]: directly to Speaker (N-1):
-                for speaker_num in sorted(speakers_in_text, reverse=True):
-                    pattern = f'\\[{speaker_num}\\]\\s*:'
-                    replacement = f'Speaker {speaker_num - 1}:'
-                    converted_text = re.sub(pattern, replacement, converted_text)
+                # Convert [N]: directly to Speaker (N-1): and handle multi-line text
+                # Split text to preserve speaker segments while cleaning up newlines within each segment
+                segments = []
+                
+                # Find all speaker markers with their positions
+                speaker_matches = list(re.finditer(f'\\[({"|".join(map(str, speakers_in_text))})\\]\\s*:', converted_text))
+                
+                for i, match in enumerate(speaker_matches):
+                    speaker_num = int(match.group(1))
+                    start = match.end()
+                    
+                    # Find where this speaker's text ends (at next speaker or end of text)
+                    if i + 1 < len(speaker_matches):
+                        end = speaker_matches[i + 1].start()
+                    else:
+                        end = len(converted_text)
+                    
+                    # Extract and clean the speaker's text
+                    speaker_text = converted_text[start:end].strip()
+                    # Replace newlines with spaces within each speaker's text
+                    speaker_text = speaker_text.replace('\n', ' ').replace('\r', ' ')
+                    # Clean up multiple spaces
+                    speaker_text = ' '.join(speaker_text.split())
+                    
+                    # Add the cleaned segment with proper speaker label
+                    segments.append(f'Speaker {speaker_num - 1}: {speaker_text}')
+                
+                # Join all segments with newlines (required for multi-speaker format)
+                converted_text = '\n'.join(segments)
             
             # Build speaker names list - these are just for logging, not used by processor
             # The processor uses the speaker labels in the text itself

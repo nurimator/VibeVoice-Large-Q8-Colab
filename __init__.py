@@ -1,4 +1,8 @@
 # Created by Fabio Sarracino
+__version__ = "1.0.1"
+__author__ = "Fabio Sarracino"
+__title__ = "VibeVoice ComfyUI"
+
 import logging
 import os
 import sys
@@ -115,4 +119,4 @@ if install_vibevoice():
 else:
     logger.warning("VibeVoice nodes unavailable - installation failed")
 
-__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
+__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS', '__version__']
