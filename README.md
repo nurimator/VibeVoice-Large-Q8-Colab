@@ -250,6 +250,11 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.0.1
+- Fixed issue with line breaks in speaker text (both single and multi-speaker nodes)
+- Line breaks within individual speaker text are now automatically removed before generation
+- Improved text formatting handling for all generation modes
+
 ### Version 1.0.0
 - Initial release
 - Single speaker node with voice cloning
