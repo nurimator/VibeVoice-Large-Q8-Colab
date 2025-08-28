@@ -33,7 +33,7 @@ python_embeded/python.exe -m pip install git+https://github.com/microsoft/VibeVo
 
 ### 1. Load Text From File
 Loads text content from files in ComfyUI's input/output/temp directories.
-- **Supported formats**: .txt, .md, .text, .log, .csv, .json
+- **Supported formats**: .txt
 - **Output**: Text string for TTS nodes
 
 ### 2. VibeVoice Single Speaker
