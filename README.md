@@ -12,11 +12,13 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 🚀 **Two Model Options**: 1.5B (faster) and 7B (higher quality)
 
 ## Video Demo
-<div align="center">
-[![VibeVoice ComfyUI Wrapper Demo](https://img.youtube.com/vi/fIBMepIBKhI/maxresdefault.jpg)](https://www.youtube.com/watch?v=fIBMepIBKhI)
-
-**Click to watch the demo video**
-</div>
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=fIBMepIBKhI">
+    <img src="https://img.youtube.com/vi/fIBMepIBKhI/maxresdefault.jpg" alt="VibeVoice ComfyUI Wrapper Demo" />
+  </a>
+  <br>
+  <strong>Click to watch the demo video</strong>
+</p>
 
 ## Installation
 
