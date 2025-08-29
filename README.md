@@ -4,12 +4,21 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 
 ## Features
 
+### Core Functionality
 - 🎤 **Single Speaker TTS**: Generate natural speech with optional voice cloning
 - 👥 **Multi-Speaker Conversations**: Support for up to 4 distinct speakers
 - 🎯 **Voice Cloning**: Clone voices from audio samples
 - 📝 **Text File Loading**: Load scripts from text files
+
+### Model Options
+- 🚀 **Two Model Sizes**: 1.5B (faster) and 7B (higher quality)
 - 🔧 **Flexible Configuration**: Control temperature, sampling, and guidance scale
-- 🚀 **Two Model Options**: 1.5B (faster) and 7B (higher quality)
+
+### Performance & Optimization
+- ⚡ **Attention Mechanisms**: Choose between auto, eager, sdpa, or flash_attention_2
+- 🎛️ **Diffusion Steps**: Adjustable quality vs speed trade-off (default: 20)
+- 💾 **Memory Management**: Toggle automatic VRAM cleanup after generation
+- 🧹 **Free Memory Node**: Manual memory control for complex workflows
 
 ## Video Demo
 <p align="center">
@@ -40,7 +49,7 @@ python_embeded/python.exe -m pip install git+https://github.com/microsoft/VibeVo
 
 ## Available Nodes
 
-### 1. Load Text From File
+### 1. VibeVoice Load Text From File
 Loads text content from files in ComfyUI's input/output/temp directories.
 - **Supported formats**: .txt
 - **Output**: Text string for TTS nodes
@@ -50,18 +59,45 @@ Generates speech from text using a single voice.
 - **Text Input**: Direct text or connection from Load Text node
 - **Models**: VibeVoice-1.5B or VibeVoice-7B-Preview
 - **Voice Cloning**: Optional audio input for voice cloning
-- **Parameters**:
-  - `cfg_scale`: Classifier-free guidance (1.0-3.0, default: 1.3)
+- **Parameters** (in order):
+  - `text`: Input text to convert to speech
+  - `model`: VibeVoice-1.5B or VibeVoice-7B-Preview
+  - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
+  - `free_memory_after_generate`: Free VRAM after generation (default: True)
+  - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
   - `seed`: Random seed for reproducibility (default: 42)
-  - `use_sampling`: Enable/disable deterministic generation
-  - `temperature`: Sampling temperature (0.1-2.0)
-  - `top_p`: Nucleus sampling parameter (0.1-1.0)
+  - `cfg_scale`: Classifier-free guidance (1.0-2.0, default: 1.3)
+  - `use_sampling`: Enable/disable deterministic generation (default: False)
+- **Optional Parameters**:
+  - `voice_to_clone`: Audio input for voice cloning
+  - `temperature`: Sampling temperature (0.1-2.0, default: 0.95)
+  - `top_p`: Nucleus sampling parameter (0.1-1.0, default: 0.95)
 
 ### 3. VibeVoice Multiple Speakers
 Generates multi-speaker conversations with distinct voices.
 - **Speaker Format**: Use `[N]:` notation where N is 1-4
 - **Voice Assignment**: Optional voice samples for each speaker
 - **Recommended Model**: VibeVoice-7B-Preview for better multi-speaker quality
+- **Parameters** (in order):
+  - `text`: Input text with speaker labels
+  - `model`: VibeVoice-1.5B or VibeVoice-7B-Preview
+  - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
+  - `free_memory_after_generate`: Free VRAM after generation (default: True)
+  - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
+  - `seed`: Random seed for reproducibility (default: 42)
+  - `cfg_scale`: Classifier-free guidance (1.0-2.0, default: 1.3)
+  - `use_sampling`: Enable/disable deterministic generation (default: False)
+- **Optional Parameters**:
+  - `speaker1_voice` to `speaker4_voice`: Audio inputs for voice cloning
+  - `temperature`: Sampling temperature (0.1-2.0, default: 0.95)
+  - `top_p`: Nucleus sampling parameter (0.1-1.0, default: 0.95)
+
+### 4. VibeVoice Free Memory
+Manually frees all loaded VibeVoice models from memory.
+- **Input**: `audio` - Connect audio output to trigger memory cleanup
+- **Output**: `audio` - Passes through the input audio unchanged
+- **Use Case**: Insert between nodes to free VRAM/RAM at specific workflow points
+- **Example**: `[VibeVoice Node] → [Free Memory] → [Save Audio]`
 
 ## Multi-Speaker Text Format
 
@@ -249,6 +285,17 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.0.3
+- Added `attention_type` parameter to both Single Speaker and Multi Speaker nodes for performance optimization
+  - auto (default): Automatic selection of best implementation
+  - eager: Standard implementation without optimizations
+  - sdpa: PyTorch's optimized Scaled Dot Product Attention
+  - flash_attention_2: Flash Attention 2 for maximum performance (requires compatible GPU)
+- Added `diffusion_steps` parameter to control generation quality vs speed trade-off
+  - Default: 20 (VibeVoice default)
+  - Higher values: Better quality, longer generation time
+  - Lower values: Faster generation, potentially lower quality
 
 ### Version 1.0.2
 - Added `free_memory_after_generate` toggle to both Single Speaker and Multi Speaker nodes

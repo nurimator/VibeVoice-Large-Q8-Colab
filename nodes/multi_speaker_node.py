@@ -38,10 +38,15 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                     "default": "VibeVoice-7B-Preview",  # 7B recommended for multi-speaker
                     "tooltip": "Model to use. VibeVoice-7B is recommended for multi-speaker generation"
                 }),
-                "cfg_scale": ("FLOAT", {"default": 1.3, "min": 1.0, "max": 2.0, "step": 0.05, "tooltip": "Classifier-free guidance scale (official default: 1.3)"}),
-                "seed": ("INT", {"default": 42, "min": 0, "max": 2**32-1, "tooltip": "Random seed for generation. Default 42 is used in official examples"}),
-                "use_sampling": ("BOOLEAN", {"default": False, "tooltip": "Enable sampling mode. When False (default), uses deterministic generation like official examples"}),
+                "attention_type": (["auto", "eager", "sdpa", "flash_attention_2"], {
+                    "default": "auto",
+                    "tooltip": "Attention implementation. Auto selects the best available, eager is standard, sdpa is optimized PyTorch, flash_attention_2 requires compatible GPU"
+                }),
                 "free_memory_after_generate": ("BOOLEAN", {"default": True, "tooltip": "Free model from memory after generation to save VRAM/RAM. Disable to keep model loaded for faster subsequent generations"}),
+                "diffusion_steps": ("INT", {"default": 20, "min": 5, "max": 100, "step": 1, "tooltip": "Number of denoising steps. More steps = better quality but slower. Default: 20"}),
+                "seed": ("INT", {"default": 42, "min": 0, "max": 2**32-1, "tooltip": "Random seed for generation. Default 42 is used in official examples"}),
+                "cfg_scale": ("FLOAT", {"default": 1.3, "min": 1.0, "max": 2.0, "step": 0.05, "tooltip": "Classifier-free guidance scale (official default: 1.3)"}),
+                "use_sampling": ("BOOLEAN", {"default": False, "tooltip": "Enable sampling mode. When False (default), uses deterministic generation like official examples"}),
             },
             "optional": {
                 "speaker1_voice": ("AUDIO", {"tooltip": "Optional: Voice sample for Speaker 1. If not provided, synthetic voice will be used."}),
@@ -64,9 +69,11 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
         return self._prepare_audio_from_comfyui(voice_audio)
     
     def generate_speech(self, text: str = "", model: str = "VibeVoice-7B-Preview",
-                       speaker1_voice=None, speaker2_voice=None, speaker3_voice=None, speaker4_voice=None,
-                       cfg_scale: float = 1.3, seed: int = 42, use_sampling: bool = False,
-                       temperature: float = 0.95, top_p: float = 0.95, free_memory_after_generate: bool = True):
+                       attention_type: str = "auto", free_memory_after_generate: bool = True,
+                       diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
+                       use_sampling: bool = False, speaker1_voice=None, speaker2_voice=None, 
+                       speaker3_voice=None, speaker4_voice=None,
+                       temperature: float = 0.95, top_p: float = 0.95):
         """Generate multi-speaker speech from text using VibeVoice"""
         
         try:
@@ -146,10 +153,10 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
             # The processor uses the speaker labels in the text itself
             speakers = [f"Speaker {i}" for i in range(len(speakers_in_text))]
             
-            # Get model mapping and load model
+            # Get model mapping and load model with attention type
             model_mapping = self._get_model_mapping()
             model_path = model_mapping.get(model, model)
-            self.load_model(model_path)
+            self.load_model(model_path, attention_type)
             
             voice_inputs = [speaker1_voice, speaker2_voice, speaker3_voice, speaker4_voice]
             
@@ -177,7 +184,8 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
             
             # Generate audio with converted text (0-based speaker indexing)
             audio_dict = self._generate_with_vibevoice(
-                converted_text, voice_samples, cfg_scale, seed, use_sampling, temperature, top_p
+                converted_text, voice_samples, cfg_scale, seed, diffusion_steps,
+                use_sampling, temperature, top_p
             )
             
             # Free memory if requested

@@ -19,6 +19,7 @@ class BaseVibeVoiceNode:
         self.model = None
         self.processor = None
         self.current_model_path = None
+        self.current_attention_type = None
     
     def free_memory(self):
         """Free model and processor from memory"""
@@ -86,9 +87,13 @@ class BaseVibeVoiceNode:
                 "or install manually with: pip install transformers>=4.44.0 && pip install git+https://github.com/microsoft/VibeVoice.git"
             )
     
-    def load_model(self, model_path: str):
-        """Load VibeVoice model"""
-        if self.model is None or getattr(self, 'current_model_path', None) != model_path:
+    def load_model(self, model_path: str, attention_type: str = "auto"):
+        """Load VibeVoice model with specified attention implementation"""
+        # Check if we need to reload model due to attention type change
+        current_attention = getattr(self, 'current_attention_type', None)
+        if (self.model is None or 
+            getattr(self, 'current_model_path', None) != model_path or
+            current_attention != attention_type):
             try:
                 vibevoice, VibeVoiceInferenceModel = self._check_dependencies()
                 
@@ -119,29 +124,39 @@ class BaseVibeVoiceNode:
                 model_dir = os.path.join(comfyui_models_dir, f"models--{model_path.replace('/', '--')}")
                 model_exists_in_comfyui = os.path.exists(model_dir)
                 
+                # Prepare attention implementation kwargs
+                model_kwargs = {
+                    "cache_dir": comfyui_models_dir,
+                    "trust_remote_code": True,
+                    "torch_dtype": torch.bfloat16,
+                    "device_map": "cuda" if torch.cuda.is_available() else "cpu",
+                }
+                
+                # Set attention implementation based on user selection
+                if attention_type != "auto":
+                    model_kwargs["attn_implementation"] = attention_type
+                    logger.info(f"Using {attention_type} attention implementation")
+                else:
+                    # Auto mode - let transformers decide the best implementation
+                    logger.info("Using auto attention implementation selection")
+                
                 # Try to load locally first
                 try:
                     if model_exists_in_comfyui:
+                        model_kwargs["local_files_only"] = True
                         self.model = VibeVoiceInferenceModel.from_pretrained(
                             model_path,
-                            cache_dir=comfyui_models_dir,
-                            trust_remote_code=True,
-                            torch_dtype=torch.bfloat16,
-                            device_map="cuda" if torch.cuda.is_available() else "cpu",
-                            local_files_only=True
+                            **model_kwargs
                         )
                     else:
                         raise FileNotFoundError("Model not found locally")
                 except (FileNotFoundError, OSError) as e:
                     logger.info(f"Downloading {model_path}...")
                     
+                    model_kwargs["local_files_only"] = False
                     self.model = VibeVoiceInferenceModel.from_pretrained(
                         model_path,
-                        cache_dir=comfyui_models_dir,
-                        trust_remote_code=True,
-                        torch_dtype=torch.bfloat16,
-                        device_map="cuda" if torch.cuda.is_available() else "cpu",
-                        local_files_only=False
+                        **model_kwargs
                     )
                     elapsed = time.time() - start_time
                 else:
@@ -167,6 +182,7 @@ class BaseVibeVoiceNode:
                     self.model = self.model.cuda()
                     
                 self.current_model_path = model_path
+                self.current_attention_type = attention_type
                 
             except Exception as e:
                 logger.error(f"Failed to load VibeVoice model: {str(e)}")
@@ -283,7 +299,7 @@ class BaseVibeVoiceNode:
                 return f"Speaker 1: {text}"
     
     def _generate_with_vibevoice(self, formatted_text: str, voice_samples: List[np.ndarray], 
-                                cfg_scale: float, seed: int, use_sampling: bool,
+                                cfg_scale: float, seed: int, diffusion_steps: int, use_sampling: bool,
                                 temperature: float = 0.95, top_p: float = 0.95) -> dict:
         """Generate audio using VibeVoice model"""
         try:
@@ -300,6 +316,10 @@ class BaseVibeVoiceNode:
             # Also set numpy seed for any numpy operations
             np.random.seed(seed)
             
+            # Set diffusion steps
+            self.model.set_ddpm_inference_steps(diffusion_steps)
+            logger.info(f"Starting audio generation with {diffusion_steps} diffusion steps...")
+            
             # Prepare inputs using processor
             inputs = self.processor(
                 [formatted_text],  # Wrap text in list
@@ -311,6 +331,15 @@ class BaseVibeVoiceNode:
             # Move to device
             device = next(self.model.parameters()).device
             inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+            
+            # Estimate tokens for user information (not used as limit)
+            text_length = len(formatted_text.split())
+            estimated_tokens = text_length * 2  # More accurate estimate for display
+            
+            # Log generation start with explanation
+            logger.info(f"Generating audio with {diffusion_steps} diffusion steps...")
+            logger.info(f"Note: Progress bar shows max possible tokens, not actual needed (~{estimated_tokens} estimated)")
+            logger.info("The generation will stop automatically when audio is complete")
             
             # Generate with official parameters
             with torch.no_grad():
