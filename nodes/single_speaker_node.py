@@ -14,6 +14,15 @@ from .base_vibevoice import BaseVibeVoiceNode
 logger = logging.getLogger("VibeVoice")
 
 class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
+    def __init__(self):
+        super().__init__()
+        # Register this instance for memory management
+        try:
+            from .free_memory_node import VibeVoiceFreeMemoryNode
+            VibeVoiceFreeMemoryNode.register_single_speaker(self)
+        except:
+            pass
+    
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -32,6 +41,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                 "cfg_scale": ("FLOAT", {"default": 1.3, "min": 1.0, "max": 2.0, "step": 0.05, "tooltip": "Classifier-free guidance scale (official default: 1.3)"}),
                 "seed": ("INT", {"default": 42, "min": 0, "max": 2**32-1, "tooltip": "Random seed for generation. Default 42 is used in official examples"}),
                 "use_sampling": ("BOOLEAN", {"default": False, "tooltip": "Enable sampling mode. When False (default), uses deterministic generation like official examples"}),
+                "free_memory_after_generate": ("BOOLEAN", {"default": True, "tooltip": "Free model from memory after generation to save VRAM/RAM. Disable to keep model loaded for faster subsequent generations"}),
             },
             "optional": {
                 "voice_to_clone": ("AUDIO", {"tooltip": "Optional: Reference voice to clone. If not provided, synthetic voice will be used."}),
@@ -65,7 +75,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
     
     def generate_speech(self, text: str = "", model: str = "VibeVoice-1.5B", voice_to_clone=None, 
                        cfg_scale: float = 1.3, seed: int = 42, use_sampling: bool = False,
-                       temperature: float = 0.95, top_p: float = 0.95):
+                       temperature: float = 0.95, top_p: float = 0.95, free_memory_after_generate: bool = True):
         """Generate speech from text using VibeVoice"""
         
         try:
@@ -93,6 +103,10 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             audio_dict = self._generate_with_vibevoice(
                 formatted_text, voice_samples, cfg_scale, seed, use_sampling, temperature, top_p
             )
+            
+            # Free memory if requested
+            if free_memory_after_generate:
+                self.free_memory()
             
             return (audio_dict,)
                     

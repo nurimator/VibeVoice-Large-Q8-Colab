@@ -250,6 +250,13 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.0.2
+- Added `free_memory_after_generate` toggle to both Single Speaker and Multi Speaker nodes
+- New dedicated "Free Memory Node" for manual memory management in workflows
+- Improved VRAM/RAM usage optimization
+- Enhanced stability for long generation sessions
+- Users can now choose between automatic or manual memory management
+
 ### Version 1.0.1
 - Fixed issue with line breaks in speaker text (both single and multi-speaker nodes)
 - Line breaks within individual speaker text are now automatically removed before generation

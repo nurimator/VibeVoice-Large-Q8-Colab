@@ -1,5 +1,5 @@
 # Created by Fabio Sarracino
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __author__ = "Fabio Sarracino"
 __title__ = "VibeVoice ComfyUI"
 
@@ -95,7 +95,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {}
 try:
     from .nodes.load_text_node import LoadTextFromFileNode
     NODE_CLASS_MAPPINGS["LoadTextFromFileNode"] = LoadTextFromFileNode
-    NODE_DISPLAY_NAME_MAPPINGS["LoadTextFromFileNode"] = "Load Text From File"
+    NODE_DISPLAY_NAME_MAPPINGS["LoadTextFromFileNode"] = "VibeVoice Load Text From File"
 except Exception as e:
     logger.error(f"Failed to register LoadTextFromFile node: {e}")
 
@@ -104,6 +104,7 @@ if install_vibevoice():
     try:
         from .nodes.single_speaker_node import VibeVoiceSingleSpeakerNode
         from .nodes.multi_speaker_node import VibeVoiceMultipleSpeakersNode
+        from .nodes.free_memory_node import VibeVoiceFreeMemoryNode
         
         # Single speaker node
         NODE_CLASS_MAPPINGS["VibeVoiceSingleSpeakerNode"] = VibeVoiceSingleSpeakerNode
@@ -112,6 +113,10 @@ if install_vibevoice():
         # Multi speaker node
         NODE_CLASS_MAPPINGS["VibeVoiceMultipleSpeakersNode"] = VibeVoiceMultipleSpeakersNode
         NODE_DISPLAY_NAME_MAPPINGS["VibeVoiceMultipleSpeakersNode"] = "VibeVoice Multiple Speakers"
+        
+        # Free memory node
+        NODE_CLASS_MAPPINGS["VibeVoiceFreeMemoryNode"] = VibeVoiceFreeMemoryNode
+        NODE_DISPLAY_NAME_MAPPINGS["VibeVoiceFreeMemoryNode"] = "VibeVoice Free Memory"
         
     except Exception as e:
         logger.error(f"Failed to register VibeVoice nodes: {e}")

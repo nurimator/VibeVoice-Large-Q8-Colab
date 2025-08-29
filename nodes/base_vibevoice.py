@@ -20,6 +20,32 @@ class BaseVibeVoiceNode:
         self.processor = None
         self.current_model_path = None
     
+    def free_memory(self):
+        """Free model and processor from memory"""
+        try:
+            if self.model is not None:
+                del self.model
+                self.model = None
+            
+            if self.processor is not None:
+                del self.processor
+                self.processor = None
+            
+            self.current_model_path = None
+            
+            # Force garbage collection and clear CUDA cache if available
+            import gc
+            gc.collect()
+            
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            
+            logger.info("Model and processor memory freed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error freeing memory: {e}")
+    
     def _check_dependencies(self):
         """Check if VibeVoice is available and import it with fallback installation"""
         try:
