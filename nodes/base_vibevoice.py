@@ -162,9 +162,63 @@ class BaseVibeVoiceNode:
                 else:
                     elapsed = time.time() - start_time
                 
-                # Load processor
+                # Load processor with proper error handling
                 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
-                self.processor = VibeVoiceProcessor.from_pretrained(model_path)
+                try:
+                    # First try with local files if model was loaded locally
+                    if model_exists_in_comfyui:
+                        self.processor = VibeVoiceProcessor.from_pretrained(
+                            model_path, 
+                            local_files_only=True,
+                            trust_remote_code=True,
+                            cache_dir=comfyui_models_dir
+                        )
+                    else:
+                        # Download from HuggingFace
+                        self.processor = VibeVoiceProcessor.from_pretrained(
+                            model_path,
+                            trust_remote_code=True,
+                            cache_dir=comfyui_models_dir
+                        )
+                except Exception as proc_error:
+                    logger.warning(f"Failed to load processor from {model_path}: {proc_error}")
+                    
+                    # Check if error is about missing Qwen tokenizer
+                    if "Qwen" in str(proc_error) and "tokenizer" in str(proc_error).lower():
+                        logger.info("Downloading required Qwen tokenizer files...")
+                        # The processor needs the Qwen tokenizer, ensure it's available
+                        try:
+                            from transformers import AutoTokenizer
+                            # Pre-download the Qwen tokenizer that VibeVoice depends on
+                            _ = AutoTokenizer.from_pretrained(
+                                "Qwen/Qwen2.5-1.5B",
+                                trust_remote_code=True,
+                                cache_dir=comfyui_models_dir
+                            )
+                            logger.info("Qwen tokenizer downloaded, retrying processor load...")
+                        except Exception as tokenizer_error:
+                            logger.warning(f"Failed to download Qwen tokenizer: {tokenizer_error}")
+                    
+                    logger.info("Attempting to load processor with fallback method...")
+                    
+                    # Fallback: try loading without local_files_only constraint
+                    try:
+                        self.processor = VibeVoiceProcessor.from_pretrained(
+                            model_path,
+                            local_files_only=False,
+                            trust_remote_code=True,
+                            cache_dir=comfyui_models_dir
+                        )
+                    except Exception as fallback_error:
+                        logger.error(f"Processor loading failed completely: {fallback_error}")
+                        raise Exception(
+                            f"Failed to load VibeVoice processor. Error: {fallback_error}\n"
+                            f"This might be due to missing tokenizer files. Try:\n"
+                            f"1. Ensure you have internet connection for first-time download\n"
+                            f"2. Clear the ComfyUI/models/vibevoice folder and retry\n"
+                            f"3. Install transformers: pip install transformers>=4.44.0\n"
+                            f"4. Manually download Qwen tokenizer: from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B')"
+                        )
                 
                 # Restore environment variables
                 if original_hf_home is not None:

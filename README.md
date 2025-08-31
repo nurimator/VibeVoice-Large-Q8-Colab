@@ -20,8 +20,6 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 💾 **Memory Management**: Toggle automatic VRAM cleanup after generation
 - 🧹 **Free Memory Node**: Manual memory control for complex workflows
 
----
-
 ## Video Demo
 <p align="center">
   <a href="https://www.youtube.com/watch?v=fIBMepIBKhI">
@@ -30,8 +28,6 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
   <br>
   <strong>Click to watch the demo video</strong>
 </p>
-
----
 
 ## Installation
 
@@ -50,8 +46,6 @@ If automatic installation fails:
 cd ComfyUI
 python_embeded/python.exe -m pip install git+https://github.com/microsoft/VibeVoice.git
 ```
-
----
 
 ## Available Nodes
 
@@ -105,8 +99,6 @@ Manually frees all loaded VibeVoice models from memory.
 - **Use Case**: Insert between nodes to free VRAM/RAM at specific workflow points
 - **Example**: `[VibeVoice Node] → [Free Memory] → [Save Audio]`
 
----
-
 ## Multi-Speaker Text Format
 
 For multi-speaker generation, format your text using the `[N]:` notation:
@@ -125,22 +117,6 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 - The system automatically detects the number of speakers from your text
 - Each speaker can have an optional voice sample for cloning
 
-### About the Original Format
-
-The original VibeVoice format for Multi-Speaker generation uses labels like:
-```
-Speaker 1: Hello, how are you today?
-Speaker 2: I'm doing great, thanks for asking!
-```
-For improved readability and usability, our ComfyUI node also supports an alternative format using `[1]`, `[2]`:
-```
-[1]: Hello, how are you today?
-[2]: I'm doing great, thanks for asking!
-```
-**Both formats are valid**, and you can choose whichever you prefer.
-
----
-
 ## Model Information
 
 ### VibeVoice-1.5B
@@ -157,8 +133,6 @@ For improved readability and usability, our ComfyUI node also supports an altern
 
 Models are automatically downloaded on first use and cached in `ComfyUI/models/vibevoice/`.
 
----
-
 ## Generation Modes
 
 ### Deterministic Mode (Default)
@@ -172,8 +146,6 @@ Models are automatically downloaded on first use and cached in `ComfyUI/models/v
 - Uses temperature and top_p parameters
 - Good for creative exploration
 
----
-
 ## Voice Cloning
 
 To clone a voice:
@@ -185,8 +157,6 @@ To clone a voice:
 - Clear audio with minimal background noise
 - Minimum 3–10 seconds. Recommended at least 30 seconds for better quality
 - Automatically resampled to 24kHz
-
----
 
 ## Tips for Best Results
 
@@ -209,8 +179,6 @@ To clone a voice:
    - Subsequent runs use cached models
    - GPU recommended for faster inference
 
----
-
 ## System Requirements
 
 ### Hardware
@@ -223,8 +191,6 @@ To clone a voice:
 - PyTorch 2.0+
 - CUDA 11.8+ (for GPU acceleration)
 - ComfyUI (latest version)
-
----
 
 ## Troubleshooting
 
@@ -242,8 +208,6 @@ To clone a voice:
 - 7B model requires ~16GB VRAM
 - Use 1.5B model for lower VRAM systems
 - Models use bfloat16 precision for efficiency
-
----
 
 ## Examples
 
@@ -272,8 +236,6 @@ use_sampling: False
 [1]: Let's begin with the agenda.
 ```
 
----
-
 ## Performance Benchmarks
 
 | Model | VRAM Usage | Context Length | Max Audio Duration |
@@ -288,8 +250,6 @@ use_sampling: False
 - Some seeds may produce unstable output
 - Background music generation cannot be directly controlled
 
----
-
 ## License
 
 This ComfyUI wrapper is released under the MIT License. See LICENSE file for details.
@@ -298,21 +258,15 @@ This ComfyUI wrapper is released under the MIT License. See LICENSE file for det
 - VibeVoice is for research purposes only
 - Check Microsoft's VibeVoice repository for full model license details
 
----
-
 ## Links
 
 - [Original VibeVoice Repository](https://github.com/microsoft/VibeVoice) - Official Microsoft VibeVoice repository
-
----
 
 ## Credits
 
 - **VibeVoice Model**: Microsoft Research
 - **ComfyUI Integration**: Fabio Sarracino
 - **Base Model**: Built on Qwen2.5 architecture
-
----
 
 ## Support
 
@@ -321,8 +275,6 @@ For issues or questions:
 2. Review ComfyUI logs for error messages
 3. Ensure VibeVoice is properly installed
 4. Open an issue with detailed error information
-
----
 
 ## Contributing
 
@@ -333,6 +285,9 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.0.4
+- Improved tokenizer dependency handling
 
 ### Version 1.0.3
 - Added `attention_type` parameter to both Single Speaker and Multi Speaker nodes for performance optimization
