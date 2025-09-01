@@ -61,7 +61,7 @@ Generates speech from text using a single voice.
 - **Voice Cloning**: Optional audio input for voice cloning
 - **Parameters** (in order):
   - `text`: Input text to convert to speech
-  - `model`: VibeVoice-1.5B or VibeVoice-7B-Preview
+  - `model`: VibeVoice-1.5B, VibeVoice-Large-Preview (deprecated), or VibeVoice-Large
   - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -80,7 +80,7 @@ Generates multi-speaker conversations with distinct voices.
 - **Recommended Model**: VibeVoice-7B-Preview for better multi-speaker quality
 - **Parameters** (in order):
   - `text`: Input text with speaker labels
-  - `model`: VibeVoice-1.5B or VibeVoice-7B-Preview
+  - `model`: VibeVoice-1.5B, VibeVoice-Large-Preview (deprecated), or VibeVoice-Large
   - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -125,11 +125,19 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 - **Quality**: Good for single speaker
 - **Use Case**: Quick prototyping, single voices
 
-### VibeVoice-7B-Preview
+### VibeVoice-Large-Preview (Deprecated)
 - **Size**: ~17GB download
 - **Speed**: Slower inference
 - **Quality**: Superior, especially for multi-speaker
-- **Use Case**: Production quality, multi-speaker conversations
+- **Use Case**: Legacy support only - use VibeVoice-Large instead
+- **Note**: This is the preview version, now superseded by VibeVoice-Large
+
+### VibeVoice-Large
+- **Size**: ~17GB download
+- **Speed**: Slower inference but optimized
+- **Quality**: Best available quality
+- **Use Case**: Highest quality production, multi-speaker conversations
+- **Note**: Latest official release from Microsoft
 
 Models are automatically downloaded on first use and cached in `ComfyUI/models/vibevoice/`.
 
@@ -166,8 +174,9 @@ To clone a voice:
    - For multi-speaker, ensure clear speaker transitions
 
 2. **Model Selection**:
-   - Use 1.5B for quick single-speaker tasks
-   - Use 7B for multi-speaker or when quality is priority
+   - Use 1.5B for quick single-speaker tasks (fastest, ~8GB VRAM)
+   - Use Large-Preview (deprecated) for legacy workflows (~16GB VRAM)
+   - Use Large for best quality and multi-speaker (~16GB VRAM)
 
 3. **Seed Management**:
    - Default seed (42) works well for most cases
@@ -238,10 +247,11 @@ use_sampling: False
 
 ## Performance Benchmarks
 
-| Model | VRAM Usage | Context Length | Max Audio Duration |
-|-------|------------|----------------|-------------------|
-| VibeVoice-1.5B | ~8GB | 64K tokens | ~90 minutes |
-| VibeVoice-7B | ~16GB | 32K tokens | ~45 minutes |
+| Model                  | VRAM Usage | Context Length | Max Audio Duration |
+|------------------------|------------|----------------|-------------------|
+| VibeVoice-1.5B         | ~8GB | 64K tokens | ~90 minutes |
+| VibeVoice-Large-Preview | ~16GB | 32K tokens | ~45 minutes |
+| VibeVoice-Large | ~16GB | 32K tokens | ~45 minutes |
 
 ## Known Limitations
 

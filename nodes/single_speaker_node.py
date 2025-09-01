@@ -34,9 +34,9 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                     "forceInput": False,
                     "dynamicPrompts": True
                 }),
-                "model": (["VibeVoice-1.5B", "VibeVoice-7B-Preview"], {
+                "model": (["VibeVoice-1.5B", "VibeVoice-Large-Preview", "VibeVoice-Large"], {
                     "default": "VibeVoice-1.5B", 
-                    "tooltip": "Model to use. 1.5B is faster, 7B has better quality"
+                    "tooltip": "Model to use. 1.5B is faster, Large has better quality. Large-Preview is deprecated, use Large instead"
                 }),
                 "attention_type": (["auto", "eager", "sdpa", "flash_attention_2"], {
                     "default": "auto",

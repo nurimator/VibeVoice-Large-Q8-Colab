@@ -324,7 +324,8 @@ class BaseVibeVoiceNode:
         """Get model name mappings"""
         return {
             "VibeVoice-1.5B": "microsoft/VibeVoice-1.5B",
-            "VibeVoice-7B-Preview": "WestZhang/VibeVoice-Large-pt"
+            "VibeVoice-Large-Preview": "WestZhang/VibeVoice-Large-pt",
+            "VibeVoice-Large": "microsoft/VibeVoice-Large"
         }
     
     def _format_text_for_vibevoice(self, text: str, speakers: list) -> str:
