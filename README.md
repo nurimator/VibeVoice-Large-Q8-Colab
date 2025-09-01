@@ -296,6 +296,9 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.0.5
+- Added support for Microsoft's official VibeVoice-Large model (stable release)
+
 ### Version 1.0.4
 - Improved tokenizer dependency handling
 
