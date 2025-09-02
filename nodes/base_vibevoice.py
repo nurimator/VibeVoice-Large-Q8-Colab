@@ -292,9 +292,10 @@ class BaseVibeVoiceNode:
             waveform = voice_audio["waveform"]
             input_sample_rate = voice_audio.get("sample_rate", target_sample_rate)
             
-            # Convert to numpy
+            # Convert to numpy (handling BFloat16 tensors)
             if isinstance(waveform, torch.Tensor):
-                audio_np = waveform.cpu().numpy()
+                # Convert to float32 first as numpy doesn't support BFloat16
+                audio_np = waveform.cpu().float().numpy()
             else:
                 audio_np = np.array(waveform)
             
