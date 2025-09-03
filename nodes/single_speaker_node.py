@@ -119,8 +119,16 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             return (audio_dict,)
                     
         except Exception as e:
-            logger.error(f"Single speaker speech generation failed: {str(e)}")
-            raise Exception(f"Error generating speech: {str(e)}")
+            # Check if this is an interruption by the user
+            import comfy.model_management as mm
+            if isinstance(e, mm.InterruptProcessingException):
+                # User interrupted - just log it and re-raise to stop the workflow
+                logger.info("Generation interrupted by user")
+                raise  # Propagate the interruption to stop the workflow
+            else:
+                # Real error - show it
+                logger.error(f"Single speaker speech generation failed: {str(e)}")
+                raise Exception(f"Error generating speech: {str(e)}")
 
     @classmethod
     def IS_CHANGED(cls, text="", model="VibeVoice-1.5B", voice_to_clone=None, **kwargs):

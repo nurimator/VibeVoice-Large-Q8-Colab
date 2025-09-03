@@ -296,8 +296,12 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.0.7
+- Added interruption handler to detect user's cancel request
+- Bug fixing
+
 ### Version 1.0.6
-- Fixed a bug that prevented VibeVoice nodes from receiving audio directly from another VibeVoice node.
+- Fixed a bug that prevented VibeVoice nodes from receiving audio directly from another VibeVoice node
 
 ### Version 1.0.5
 - Added support for Microsoft's official VibeVoice-Large model (stable release)

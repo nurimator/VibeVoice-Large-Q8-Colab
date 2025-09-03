@@ -7,10 +7,19 @@ import tempfile
 import torch
 import numpy as np
 import re
+import gc
 from typing import List, Optional, Tuple, Any
 
 # Setup logging
 logger = logging.getLogger("VibeVoice")
+
+# Import for interruption support
+try:
+    import execution
+    INTERRUPTION_SUPPORT = True
+except ImportError:
+    INTERRUPTION_SUPPORT = False
+    logger.warning("Interruption support not available")
 
 class BaseVibeVoiceNode:
     """Base class for VibeVoice nodes containing common functionality"""
@@ -376,6 +385,21 @@ class BaseVibeVoiceNode:
             self.model.set_ddpm_inference_steps(diffusion_steps)
             logger.info(f"Starting audio generation with {diffusion_steps} diffusion steps...")
             
+            # Check for interruption before starting generation
+            if INTERRUPTION_SUPPORT:
+                try:
+                    import comfy.model_management as mm
+                    
+                    # Check if we're being interrupted right now
+                    # The interrupt flag is reset by ComfyUI before each node execution
+                    # So we only check model_management's throw_exception_if_processing_interrupted
+                    # which is the proper way to check for interruption
+                    mm.throw_exception_if_processing_interrupted()
+                    
+                except ImportError:
+                    # If comfy.model_management is not available, skip this check
+                    pass
+            
             # Prepare inputs using processor
             inputs = self.processor(
                 [formatted_text],  # Wrap text in list
@@ -390,12 +414,29 @@ class BaseVibeVoiceNode:
             
             # Estimate tokens for user information (not used as limit)
             text_length = len(formatted_text.split())
-            estimated_tokens = text_length * 2  # More accurate estimate for display
+            estimated_tokens = text_length * 2.5  # More accurate estimate for display
             
             # Log generation start with explanation
             logger.info(f"Generating audio with {diffusion_steps} diffusion steps...")
             logger.info(f"Note: Progress bar shows max possible tokens, not actual needed (~{estimated_tokens} estimated)")
             logger.info("The generation will stop automatically when audio is complete")
+            
+            # Create stop check function for interruption support
+            stop_check_fn = None
+            if INTERRUPTION_SUPPORT:
+                def check_comfyui_interrupt():
+                    """Check if ComfyUI has requested interruption"""
+                    try:
+                        if hasattr(execution, 'PromptExecutor') and hasattr(execution.PromptExecutor, 'interrupted'):
+                            interrupted = execution.PromptExecutor.interrupted
+                            if interrupted:
+                                logger.info("Generation interrupted by user via stop_check_fn")
+                            return interrupted
+                    except:
+                        pass
+                    return False
+                
+                stop_check_fn = check_comfyui_interrupt
             
             # Generate with official parameters
             with torch.no_grad():
@@ -409,6 +450,7 @@ class BaseVibeVoiceNode:
                         do_sample=True,
                         temperature=temperature,
                         top_p=top_p,
+                        stop_check_fn=stop_check_fn,
                     )
                 else:
                     # Use deterministic mode like official examples
@@ -418,6 +460,7 @@ class BaseVibeVoiceNode:
                         cfg_scale=cfg_scale,
                         max_new_tokens=None,
                         do_sample=False,  # More deterministic generation
+                        stop_check_fn=stop_check_fn,
                     )
                 
                 # Check if we got actual audio output
@@ -449,5 +492,11 @@ class BaseVibeVoiceNode:
                     raise Exception(f"VibeVoice returned unexpected output format: {type(output)}")
                 
         except Exception as e:
+            # Re-raise interruption exceptions without wrapping
+            import comfy.model_management as mm
+            if isinstance(e, mm.InterruptProcessingException):
+                raise  # Let the interruption propagate
+            
+            # For real errors, log and re-raise with context
             logger.error(f"VibeVoice generation failed: {e}")
             raise Exception(f"VibeVoice generation failed: {str(e)}")
