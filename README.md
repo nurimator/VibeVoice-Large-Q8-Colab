@@ -38,14 +38,7 @@ cd ComfyUI/custom_nodes
 git clone https://github.com/Enemyx-net/VibeVoice-ComfyUI
 ```
 
-2. Restart ComfyUI - the nodes will automatically install VibeVoice on first use
-
-### Manual Installation
-If automatic installation fails:
-```bash
-cd ComfyUI
-python_embeded/python.exe -m pip install git+https://github.com/microsoft/VibeVoice.git
-```
+2. Restart ComfyUI - the nodes will automatically install requirements on first use
 
 ## Available Nodes
 
@@ -295,6 +288,12 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.0.9
+- Embedded VibeVoice code directly into the wrapper
+  - Added vvembed folder containing the complete VibeVoice code (MIT licensed)
+  - No longer requires external VibeVoice installation
+  - Ensures continued functionality for all users
 
 ### Version 1.0.8
 - BFloat16 Compatibility Fix

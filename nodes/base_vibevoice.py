@@ -59,41 +59,38 @@ class BaseVibeVoiceNode:
     def _check_dependencies(self):
         """Check if VibeVoice is available and import it with fallback installation"""
         try:
-            import vibevoice
-            from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
-            return vibevoice, VibeVoiceForConditionalGenerationInference
+            import sys
+            import os
+            
+            # Add vvembed to path
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(current_dir)
+            vvembed_path = os.path.join(parent_dir, 'vvembed')
+            
+            if vvembed_path not in sys.path:
+                sys.path.insert(0, vvembed_path)
+            
+            # Import from embedded version
+            from modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
+            
+            logger.info(f"Using embedded VibeVoice from {vvembed_path}")
+            return None, VibeVoiceForConditionalGenerationInference
             
         except ImportError as e:
-            # Try to install and import again
-            try:
-                import subprocess
-                import sys
-                
-                # First ensure compatible transformers version
-                transformers_cmd = [sys.executable, "-m", "pip", "install", "transformers>=4.44.0"]
-                subprocess.run(transformers_cmd, capture_output=True, text=True, timeout=300)
-                
-                cmd = [sys.executable, "-m", "pip", "install", "git+https://github.com/microsoft/VibeVoice.git"]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-                
-                if result.returncode == 0:
-                    # Force reload of sys.modules to pick up new installation
-                    import importlib
-                    if 'vibevoice' in sys.modules:
-                        importlib.reload(sys.modules['vibevoice'])
-                    
-                    # Try import again
-                    import vibevoice
-                    from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
-                    return vibevoice, VibeVoiceForConditionalGenerationInference
-                    
-            except Exception as install_error:
-                logger.error(f"Installation attempt failed: {install_error}")
+            logger.error(f"Embedded VibeVoice import failed: {e}")
             
-            logger.error(f"VibeVoice import failed: {e}")
+            # Try fallback to installed version if available
+            try:
+                import vibevoice
+                from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
+                logger.warning("Falling back to system-installed VibeVoice")
+                return vibevoice, VibeVoiceForConditionalGenerationInference
+            except ImportError:
+                pass
+            
             raise Exception(
-                "VibeVoice installation/import failed. Please restart ComfyUI completely, "
-                "or install manually with: pip install transformers>=4.44.0 && pip install git+https://github.com/microsoft/VibeVoice.git"
+                "VibeVoice embedded module import failed. Please ensure the vvembed folder exists "
+                "and transformers>=4.44.0 is installed."
             )
     
     def load_model(self, model_path: str, attention_type: str = "auto"):
@@ -172,7 +169,7 @@ class BaseVibeVoiceNode:
                     elapsed = time.time() - start_time
                 
                 # Load processor with proper error handling
-                from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+                from processor.vibevoice_processor import VibeVoiceProcessor
                 try:
                     # First try with local files if model was loaded locally
                     if model_exists_in_comfyui:

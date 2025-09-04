@@ -1,10 +1,16 @@
+accelerate==1.6.0
+transformers==4.51.3 # Microsoft developed original VibeVoce project on transformers==4.51.3, later version may not be compatible
+diffusers
+tqdm
+scipy
+ml-collections
 torch>=2.0.0
 torchaudio>=2.0.0
 numpy>=1.20.0
-transformers>=4.51.3
 librosa>=0.9.0
 soundfile>=0.12.0
 av>=14.3.0
 peft>=0.17.0
 huggingface_hub>=0.25.1
-git+https://github.com/microsoft/VibeVoice.git
+absl-py
+aiortc
