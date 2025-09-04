@@ -263,7 +263,7 @@ This ComfyUI wrapper is released under the MIT License. See LICENSE file for det
 
 ## Links
 
-- [Original VibeVoice Repository](https://github.com/microsoft/VibeVoice) - Official Microsoft VibeVoice repository
+- [Original VibeVoice Repository](https://github.com/microsoft/VibeVoice) - Official Microsoft VibeVoice repository (currently unavailable)
 
 ## Credits
 
