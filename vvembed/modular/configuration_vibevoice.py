@@ -9,6 +9,8 @@ from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 
 logger = logging.get_logger(__name__)
 
+# to be improved...
+
 
 class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     model_type = "vibevoice_acoustic_tokenizer"
