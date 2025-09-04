@@ -237,7 +237,6 @@ use_sampling: False
 |------------------------|------------|----------------|-------------------|
 | VibeVoice-1.5B         | ~8GB | 64K tokens | ~90 minutes |
 | VibeVoice-Large | ~16GB | 32K tokens | ~45 minutes |
-| VibeVoice-Large | ~16GB | 32K tokens | ~45 minutes |
 
 ## Known Limitations
 
