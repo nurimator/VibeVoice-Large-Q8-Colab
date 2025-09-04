@@ -16,12 +16,6 @@ The only modifications made to the original code are:
 - Changed absolute imports from `vibevoice` to relative imports
 - No functional changes to the core logic
 
-## Requirements
-
-- transformers >= 4.44.0
-- torch
-- numpy
-
 ## Note
 
 This is a preservation copy to ensure the continued availability of VibeVoice for the ComfyUI community.
