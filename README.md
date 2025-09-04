@@ -11,7 +11,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 📝 **Text File Loading**: Load scripts from text files
 
 ### Model Options
-- 🚀 **Two Model Sizes**: 1.5B (faster) and 7B (higher quality)
+- 🚀 **Two Model Sizes**: 1.5B (faster) and Large (higher quality)
 - 🔧 **Flexible Configuration**: Control temperature, sampling, and guidance scale
 
 ### Performance & Optimization
@@ -50,11 +50,11 @@ Loads text content from files in ComfyUI's input/output/temp directories.
 ### 2. VibeVoice Single Speaker
 Generates speech from text using a single voice.
 - **Text Input**: Direct text or connection from Load Text node
-- **Models**: VibeVoice-1.5B or VibeVoice-7B-Preview
+- **Models**: VibeVoice-1.5B or VibeVoice-Large
 - **Voice Cloning**: Optional audio input for voice cloning
 - **Parameters** (in order):
   - `text`: Input text to convert to speech
-  - `model`: VibeVoice-1.5B, VibeVoice-Large-Preview (deprecated), or VibeVoice-Large
+  - `model`: VibeVoice-1.5B or VibeVoice-Large
   - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -70,10 +70,10 @@ Generates speech from text using a single voice.
 Generates multi-speaker conversations with distinct voices.
 - **Speaker Format**: Use `[N]:` notation where N is 1-4
 - **Voice Assignment**: Optional voice samples for each speaker
-- **Recommended Model**: VibeVoice-7B-Preview for better multi-speaker quality
+- **Recommended Model**: VibeVoice-Large for better multi-speaker quality
 - **Parameters** (in order):
   - `text`: Input text with speaker labels
-  - `model`: VibeVoice-1.5B, VibeVoice-Large-Preview (deprecated), or VibeVoice-Large
+  - `model`: VibeVoice-1.5B or VibeVoice-Large
   - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -118,13 +118,6 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 - **Quality**: Good for single speaker
 - **Use Case**: Quick prototyping, single voices
 
-### VibeVoice-Large-Preview (Deprecated)
-- **Size**: ~17GB download
-- **Speed**: Slower inference
-- **Quality**: Superior, especially for multi-speaker
-- **Use Case**: Legacy support only - use VibeVoice-Large instead
-- **Note**: This is the preview version, now superseded by VibeVoice-Large
-
 ### VibeVoice-Large
 - **Size**: ~17GB download
 - **Speed**: Slower inference but optimized
@@ -168,7 +161,7 @@ To clone a voice:
 
 2. **Model Selection**:
    - Use 1.5B for quick single-speaker tasks (fastest, ~8GB VRAM)
-   - Use Large-Preview (deprecated) for legacy workflows (~16GB VRAM)
+   - Use Large for best quality (~16GB VRAM)
    - Use Large for best quality and multi-speaker (~16GB VRAM)
 
 3. **Seed Management**:
@@ -185,7 +178,7 @@ To clone a voice:
 
 ### Hardware
 - **Minimum**: 8GB VRAM for VibeVoice-1.5B
-- **Recommended**: 16GB+ VRAM for VibeVoice-7B
+- **Recommended**: 16GB+ VRAM for VibeVoice-Large
 - **RAM**: 16GB+ system memory
 
 ### Software
@@ -207,7 +200,7 @@ To clone a voice:
 - Check that speaker numbers are sequential (1,2,3 not 1,3,5)
 
 ### Memory Issues
-- 7B model requires ~16GB VRAM
+- Large model requires ~16GB VRAM
 - Use 1.5B model for lower VRAM systems
 - Models use bfloat16 precision for efficiency
 
@@ -243,7 +236,7 @@ use_sampling: False
 | Model                  | VRAM Usage | Context Length | Max Audio Duration |
 |------------------------|------------|----------------|-------------------|
 | VibeVoice-1.5B         | ~8GB | 64K tokens | ~90 minutes |
-| VibeVoice-Large-Preview | ~16GB | 32K tokens | ~45 minutes |
+| VibeVoice-Large | ~16GB | 32K tokens | ~45 minutes |
 | VibeVoice-Large | ~16GB | 32K tokens | ~45 minutes |
 
 ## Known Limitations
@@ -288,6 +281,10 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.1.0
+- Updated the URL for downloading the VibeVoice-Large model
+- Removed VibeVoice-Large-Preview deprecated model
 
 ### Version 1.0.9
 - Embedded VibeVoice code directly into the wrapper
@@ -344,4 +341,4 @@ Contributions welcome! Please:
 - Multi-speaker node with automatic speaker detection
 - Text file loading from ComfyUI directories
 - Deterministic and sampling generation modes
-- Support for VibeVoice 1.5B and 7B models
+- Support for VibeVoice 1.5B and Large models

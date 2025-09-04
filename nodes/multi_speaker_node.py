@@ -34,9 +34,9 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                     "forceInput": False,
                     "dynamicPrompts": True
                 }),
-                "model": (["VibeVoice-1.5B", "VibeVoice-Large-Preview", "VibeVoice-Large"], {
+                "model": (["VibeVoice-1.5B", "VibeVoice-Large"], {
                     "default": "VibeVoice-Large",  # Large recommended for multi-speaker
-                    "tooltip": "Model to use. Large is recommended for multi-speaker generation. Large-Preview is deprecated, use Large instead"
+                    "tooltip": "Model to use. Large is recommended for multi-speaker generation"
                 }),
                 "attention_type": (["auto", "eager", "sdpa", "flash_attention_2"], {
                     "default": "auto",
