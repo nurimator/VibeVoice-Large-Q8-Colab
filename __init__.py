@@ -1,5 +1,5 @@
 # Created by Fabio Sarracino
-__version__ = "1.0.7"
+__version__ = "1.0.8"
 __author__ = "Fabio Sarracino"
 __title__ = "VibeVoice ComfyUI"
 

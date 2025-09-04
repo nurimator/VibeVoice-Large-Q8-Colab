@@ -296,6 +296,13 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.0.8
+- BFloat16 Compatibility Fix
+  - Fixed tensor type compatibility issues with audio processing nodes
+  - Input audio tensors are now converted from BFloat16 to Float32 for numpy compatibility
+  - Output audio tensors are explicitly converted to Float32 to ensure compatibility with downstream nodes
+  - Resolves "Got unsupported ScalarType BFloat16" errors when using voice cloning or saving audio
+
 ### Version 1.0.7
 - Added interruption handler to detect user's cancel request
 - Bug fixing

@@ -478,8 +478,10 @@ class BaseVibeVoiceNode:
                     elif audio_tensor.dim() == 2:
                         audio_tensor = audio_tensor.unsqueeze(0)
                     
+                    # Convert to float32 for compatibility with downstream nodes (Save Audio, etc.)
+                    # Many audio processing nodes don't support BFloat16
                     return {
-                        "waveform": audio_tensor.cpu(),
+                        "waveform": audio_tensor.cpu().float(),
                         "sample_rate": 24000
                     }
                     
