@@ -90,7 +90,7 @@ class BaseVibeVoiceNode:
             
             raise Exception(
                 "VibeVoice embedded module import failed. Please ensure the vvembed folder exists "
-                "and transformers>=4.44.0 is installed."
+                "and transformers>=4.51.3 is installed."
             )
     
     def load_model(self, model_path: str, attention_type: str = "auto"):
@@ -222,7 +222,7 @@ class BaseVibeVoiceNode:
                             f"This might be due to missing tokenizer files. Try:\n"
                             f"1. Ensure you have internet connection for first-time download\n"
                             f"2. Clear the ComfyUI/models/vibevoice folder and retry\n"
-                            f"3. Install transformers: pip install transformers>=4.44.0\n"
+                            f"3. Install transformers: pip install transformers>=4.51.3\n"
                             f"4. Manually download Qwen tokenizer: from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B')"
                         )
                 

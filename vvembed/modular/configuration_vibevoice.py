@@ -1,3 +1,6 @@
+# Original code by Microsoft
+# updated by Fabio Sarracino - Enemyx-net
+
 """ VibeVoice_AcousticTokenizer model configuration"""
 
 from typing import Dict, List, Optional, Tuple
@@ -239,6 +242,23 @@ class VibeVoiceConfig(PretrainedConfig):
         # other parameters
         self.acoustic_vae_dim = getattr(self.acoustic_tokenizer_config, 'vae_dim', 64)
         self.semantic_vae_dim = getattr(self.semantic_tokenizer_config, 'vae_dim', 128)
+        
+        # Add attributes required by newer transformers versions from decoder_config
+        # These are used by GenerationMixin in newer versions
+        if hasattr(self.decoder_config, 'num_hidden_layers'):
+            self.num_hidden_layers = self.decoder_config.num_hidden_layers
+        if hasattr(self.decoder_config, 'vocab_size'):
+            self.vocab_size = self.decoder_config.vocab_size
+        if hasattr(self.decoder_config, 'hidden_size'):
+            self.hidden_size = self.decoder_config.hidden_size
+        if hasattr(self.decoder_config, 'num_attention_heads'):
+            self.num_attention_heads = self.decoder_config.num_attention_heads
+        if hasattr(self.decoder_config, 'num_key_value_heads'):
+            self.num_key_value_heads = self.decoder_config.num_key_value_heads
+        if hasattr(self.decoder_config, 'intermediate_size'):
+            self.intermediate_size = self.decoder_config.intermediate_size
+        if hasattr(self.decoder_config, 'max_position_embeddings'):
+            self.max_position_embeddings = self.decoder_config.max_position_embeddings
 
         super().__init__(**kwargs)
 

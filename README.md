@@ -178,13 +178,14 @@ To clone a voice:
 
 ### Hardware
 - **Minimum**: 8GB VRAM for VibeVoice-1.5B
-- **Recommended**: 16GB+ VRAM for VibeVoice-Large
+- **Recommended**: 17GB+ VRAM for VibeVoice-Large
 - **RAM**: 16GB+ system memory
 
 ### Software
 - Python 3.8+
 - PyTorch 2.0+
 - CUDA 11.8+ (for GPU acceleration)
+- Transformers 4.51.3+
 - ComfyUI (latest version)
 
 ## Troubleshooting
@@ -280,6 +281,12 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.1.1
+- Universal Transformers Compatibility:
+  - Implemented adaptive system that automatically adjusts to different transformers versions
+  - Guaranteed compatibility from v4.51.3 onwards
+  - Auto-detects and adapts to API changes between versions
 
 ### Version 1.1.0
 - Updated the URL for downloading the VibeVoice-Large model

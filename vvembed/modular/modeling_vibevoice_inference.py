@@ -1,3 +1,6 @@
+# Original code by Microsoft
+# updated by Fabio Sarracino - Enemyx-net
+
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union, Callable
 from tqdm import tqdm
@@ -300,7 +303,30 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         )
 
         max_cache_length = generation_config.max_length - 1
-        self._prepare_cache_for_generation(generation_config, model_kwargs, None, batch_size, max_cache_length, device)
+        
+        # Fix for transformers compatibility: detect number of parameters accepted
+        import inspect
+        try:
+            sig = inspect.signature(self._prepare_cache_for_generation)
+            num_params = len(sig.parameters)
+            
+            # Newer transformers expects 6 parameters (without 'device')
+            # Older transformers expects 7 parameters (with 'device')
+            if num_params == 6 or 'device' not in sig.parameters:
+                # New signature: (self, generation_config, model_kwargs, assistant_model, batch_size, max_cache_length)
+                self._prepare_cache_for_generation(generation_config, model_kwargs, None, batch_size, max_cache_length)
+            else:
+                # Old signature: (self, generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device)
+                self._prepare_cache_for_generation(generation_config, model_kwargs, None, batch_size, max_cache_length, device)
+        except Exception as e:
+            # Fallback: try both signatures
+            try:
+                # Try new signature first (6 params)
+                self._prepare_cache_for_generation(generation_config, model_kwargs, None, batch_size, max_cache_length)
+            except TypeError:
+                # Fall back to old signature (7 params)
+                self._prepare_cache_for_generation(generation_config, model_kwargs, None, batch_size, max_cache_length, device)
+        
         model_kwargs['cache_position'] = torch.arange(input_ids_length, device=device, dtype=torch.long)
         for k, v in model_kwargs.items():
             if isinstance(v, torch.Tensor):
