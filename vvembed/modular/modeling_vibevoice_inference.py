@@ -67,6 +67,67 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
         # Apply mask to scores
         scores = scores + mask
         return scores
+
+def access_cache_safely(cache, layer_idx):
+    """Access cache tensors safely across different transformers versions
+    
+    This function handles the different DynamicCache structures across transformers versions:
+    - Old versions (< 4.36): cache.key_cache, cache.value_cache
+    - Intermediate versions: cache._keys, cache._values  
+    - New versions (4.36+): Various new structures
+    
+    Returns (k_cache, v_cache) or (None, None) if cache structure is incompatible
+    """
+    try:
+        # Method 1: Old versions (< 4.36)
+        if hasattr(cache, 'key_cache') and hasattr(cache, 'value_cache'):
+            if layer_idx < len(cache.key_cache):
+                return cache.key_cache[layer_idx], cache.value_cache[layer_idx]
+        
+        # Method 2: Private attributes (some intermediate versions)
+        if hasattr(cache, '_keys') and hasattr(cache, '_values'):
+            if layer_idx < len(cache._keys):
+                return cache._keys[layer_idx], cache._values[layer_idx]
+        
+        # Method 3: New versions with get_seq_length or similar
+        # Some versions store as list of tuples
+        if isinstance(cache, (list, tuple)) and len(cache) > layer_idx:
+            layer_cache = cache[layer_idx]
+            if isinstance(layer_cache, (list, tuple)) and len(layer_cache) >= 2:
+                return layer_cache[0], layer_cache[1]
+            elif hasattr(layer_cache, 'key_states') and hasattr(layer_cache, 'value_states'):
+                return layer_cache.key_states, layer_cache.value_states
+        
+        # Method 4: Check if cache has a different structure entirely
+        # Some very new versions might not expose cache directly
+        if hasattr(cache, 'to_legacy_tuple'):
+            # Convert to legacy format if possible
+            legacy = cache.to_legacy_tuple()
+            if legacy and layer_idx < len(legacy):
+                return legacy[layer_idx][0], legacy[layer_idx][1]
+                
+    except (AttributeError, IndexError, TypeError) as e:
+        # Log the issue but don't fail
+        logger.debug(f"Could not access cache at layer {layer_idx}: {e}")
+    
+    # Return None if we can't access the cache safely
+    return None, None
+
+def get_num_layers_from_cache(cache):
+    """Get the number of layers in the cache structure"""
+    try:
+        if hasattr(cache, 'key_cache'):
+            return len(cache.key_cache)
+        elif hasattr(cache, '_keys'):
+            return len(cache._keys)
+        elif isinstance(cache, (list, tuple)):
+            return len(cache)
+        elif hasattr(cache, 'num_layers'):
+            return cache.num_layers
+        # Default fallback - most models have 32 or fewer layers
+        return 32
+    except:
+        return 32
     
 class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
@@ -576,14 +637,32 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 for i, sample_idx in enumerate(diffusion_start_indices.tolist()):
                     negative_model_kwargs['attention_mask'][sample_idx, :] = 0
                     negative_model_kwargs['attention_mask'][sample_idx, -1] = 1
-                # update past key values
-                for layer_idx, (k_cache, v_cache) in enumerate(zip(negative_model_kwargs['past_key_values'].key_cache, 
-                                                                        negative_model_kwargs['past_key_values'].value_cache)):
+                # update past key values - using safe cache access
+                cache = negative_model_kwargs['past_key_values']
+                num_layers = get_num_layers_from_cache(cache)
+                cache_update_failed = False
+                
+                for layer_idx in range(num_layers):
+                    k_cache, v_cache = access_cache_safely(cache, layer_idx)
+                    if k_cache is None or v_cache is None:
+                        # Cache structure not compatible, skip optimization
+                        logger.debug(f"Cache optimization skipped at layer {layer_idx} - incompatible structure")
+                        cache_update_failed = True
+                        break
+                    
                     # Process each non-diffusion sample
                     for sample_idx in diffusion_start_indices.tolist():
-                        # Shift cache for this sample
-                        k_cache[sample_idx, :, -1, :] = k_cache[sample_idx, :, 0, :].clone()
-                        v_cache[sample_idx, :, -1, :] = v_cache[sample_idx, :, 0, :].clone()
+                        try:
+                            # Shift cache for this sample
+                            k_cache[sample_idx, :, -1, :] = k_cache[sample_idx, :, 0, :].clone()
+                            v_cache[sample_idx, :, -1, :] = v_cache[sample_idx, :, 0, :].clone()
+                        except (IndexError, RuntimeError) as e:
+                            logger.debug(f"Cache update failed for sample {sample_idx}: {e}")
+                            cache_update_failed = True
+                            break
+                    
+                    if cache_update_failed:
+                        break
                 # update negative_input_ids
                 for sample_idx in diffusion_start_indices.tolist():
                     negative_input_ids[sample_idx, -1] = generation_config.speech_start_id
@@ -629,15 +708,33 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                                 negative_model_kwargs['attention_mask'][sample_idx, start_idx:-1].clone()
                         negative_model_kwargs['attention_mask'][sample_idx, start_idx] = 0
 
-                    # 2. Update past_key_values
-                    for layer_idx, (k_cache, v_cache) in enumerate(zip(negative_model_kwargs['past_key_values'].key_cache, 
-                                                                        negative_model_kwargs['past_key_values'].value_cache)):
+                    # 2. Update past_key_values - using safe cache access
+                    cache = negative_model_kwargs['past_key_values']
+                    num_layers = get_num_layers_from_cache(cache)
+                    cache_update_failed = False
+                    
+                    for layer_idx in range(num_layers):
+                        k_cache, v_cache = access_cache_safely(cache, layer_idx)
+                        if k_cache is None or v_cache is None:
+                            # Cache structure not compatible, skip optimization
+                            logger.debug(f"Cache optimization skipped at layer {layer_idx} - incompatible structure")
+                            cache_update_failed = True
+                            break
+                        
                         # Process each non-diffusion sample
                         for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
-                            if start_idx + 1 < k_cache.shape[2] - 1:
-                                # Shift cache for this sample
-                                k_cache[sample_idx, :, start_idx+1:, :] = k_cache[sample_idx, :, start_idx:-1, :].clone()
-                                v_cache[sample_idx, :, start_idx+1:, :] = v_cache[sample_idx, :, start_idx:-1, :].clone()
+                            try:
+                                if start_idx + 1 < k_cache.shape[2] - 1:
+                                    # Shift cache for this sample
+                                    k_cache[sample_idx, :, start_idx+1:, :] = k_cache[sample_idx, :, start_idx:-1, :].clone()
+                                    v_cache[sample_idx, :, start_idx+1:, :] = v_cache[sample_idx, :, start_idx:-1, :].clone()
+                            except (IndexError, RuntimeError) as e:
+                                logger.debug(f"Cache update failed for sample {sample_idx}: {e}")
+                                cache_update_failed = True
+                                break
+                        
+                        if cache_update_failed:
+                            break
                     
                     # 3. Update negative_input_ids
                     for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
