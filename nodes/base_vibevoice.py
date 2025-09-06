@@ -21,6 +21,21 @@ except ImportError:
     INTERRUPTION_SUPPORT = False
     logger.warning("Interruption support not available")
 
+def get_optimal_device():
+    """Get the best available device (cuda, mps, or cpu)"""
+    if torch.cuda.is_available():
+        return "cuda"
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"
+
+def get_device_map():
+    """Get device map for model loading"""
+    device = get_optimal_device()
+    # Note: device_map "auto" might work better for MPS in some cases
+    return device if device != "mps" else "mps"
+
 class BaseVibeVoiceNode:
     """Base class for VibeVoice nodes containing common functionality"""
     
@@ -135,7 +150,7 @@ class BaseVibeVoiceNode:
                     "cache_dir": comfyui_models_dir,
                     "trust_remote_code": True,
                     "torch_dtype": torch.bfloat16,
-                    "device_map": "cuda" if torch.cuda.is_available() else "cpu",
+                    "device_map": get_device_map(),
                 }
                 
                 # Set attention implementation based on user selection
@@ -238,8 +253,11 @@ class BaseVibeVoiceNode:
                     del os.environ['HUGGINGFACE_HUB_CACHE']
                 
                 # Move to appropriate device
-                if torch.cuda.is_available():
+                device = get_optimal_device()
+                if device == "cuda":
                     self.model = self.model.cuda()
+                elif device == "mps":
+                    self.model = self.model.to("mps")
                     
                 self.current_model_path = model_path
                 self.current_attention_type = attention_type
