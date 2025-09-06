@@ -282,6 +282,11 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.2.0
+- MPS Support for Apple Silicon:
+  - Added GPU acceleration support for Mac with Apple Silicon (M1/M2/M3)
+  - Automatically detects and uses MPS backend when available, providing significant performance improvements over CPU
+
 ### Version 1.1.1
 - Universal Transformers Compatibility:
   - Implemented adaptive system that automatically adjusts to different transformers versions
