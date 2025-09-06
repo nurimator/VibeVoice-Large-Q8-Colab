@@ -282,6 +282,9 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.2.1
+- Bug Fixing
+
 ### Version 1.2.0
 - MPS Support for Apple Silicon:
   - Added GPU acceleration support for Mac with Apple Silicon (M1/M2/M3)
