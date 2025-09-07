@@ -34,9 +34,9 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                     "forceInput": False,
                     "dynamicPrompts": True
                 }),
-                "model": (["VibeVoice-1.5B", "VibeVoice-Large"], {
+                "model": (["VibeVoice-1.5B", "VibeVoice-Large", "VibeVoice-Large-Quant-4Bit"], {
                     "default": "VibeVoice-Large",  # Large recommended for multi-speaker
-                    "tooltip": "Model to use. Large is recommended for multi-speaker generation"
+                    "tooltip": "Model to use. Large is recommended for multi-speaker generation, Quant-4Bit uses less VRAM (CUDA only)"
                 }),
                 "attention_type": (["auto", "eager", "sdpa", "flash_attention_2"], {
                     "default": "auto",
@@ -156,7 +156,7 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
             # Get model mapping and load model with attention type
             model_mapping = self._get_model_mapping()
             model_path = model_mapping.get(model, model)
-            self.load_model(model_path, attention_type)
+            self.load_model(model, model_path, attention_type)
             
             voice_inputs = [speaker1_voice, speaker2_voice, speaker3_voice, speaker4_voice]
             

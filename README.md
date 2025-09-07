@@ -9,9 +9,14 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 👥 **Multi-Speaker Conversations**: Support for up to 4 distinct speakers
 - 🎯 **Voice Cloning**: Clone voices from audio samples
 - 📝 **Text File Loading**: Load scripts from text files
+- 🔄 **Node Chaining**: Connect multiple VibeVoice nodes for complex workflows
+- ⏹️ **Interruption Support**: Cancel operations before or between generations
 
 ### Model Options
-- 🚀 **Two Model Sizes**: 1.5B (faster) and Large (higher quality)
+- 🚀 **Three Model Variants**: 
+  - VibeVoice 1.5B (faster, lower memory)
+  - VibeVoice-Large (best quality, ~17GB VRAM)
+  - VibeVoice-Large-Quant-4Bit (balanced, ~7GB VRAM)
 - 🔧 **Flexible Configuration**: Control temperature, sampling, and guidance scale
 
 ### Performance & Optimization
@@ -19,6 +24,14 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 🎛️ **Diffusion Steps**: Adjustable quality vs speed trade-off (default: 20)
 - 💾 **Memory Management**: Toggle automatic VRAM cleanup after generation
 - 🧹 **Free Memory Node**: Manual memory control for complex workflows
+- 🍎 **Apple Silicon Support**: Native GPU acceleration on M1/M2/M3 Macs via MPS
+- 🔢 **4-Bit Quantization**: Reduced memory usage with minimal quality loss
+
+### Compatibility & Installation
+- 📦 **Self-Contained**: Embedded VibeVoice code, no external dependencies
+- 🔄 **Universal Compatibility**: Adaptive support for transformers v4.51.3+
+- 🖥️ **Cross-Platform**: Works on Windows, Linux, and macOS
+- 🎮 **Multi-Backend**: Supports CUDA, CPU, and MPS (Apple Silicon)
 
 ## Video Demo
 <p align="center">
@@ -54,7 +67,7 @@ Generates speech from text using a single voice.
 - **Voice Cloning**: Optional audio input for voice cloning
 - **Parameters** (in order):
   - `text`: Input text to convert to speech
-  - `model`: VibeVoice-1.5B or VibeVoice-Large
+  - `model`: VibeVoice-1.5B, VibeVoice-Large or VibeVoice-Large-Quant-4Bit
   - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -73,7 +86,7 @@ Generates multi-speaker conversations with distinct voices.
 - **Recommended Model**: VibeVoice-Large for better multi-speaker quality
 - **Parameters** (in order):
   - `text`: Input text with speaker labels
-  - `model`: VibeVoice-1.5B or VibeVoice-Large
+  - `model`: VibeVoice-1.5B, VibeVoice-Large or VibeVoice-Large-Quant-4Bit
   - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -124,6 +137,13 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 - **Quality**: Best available quality
 - **Use Case**: Highest quality production, multi-speaker conversations
 - **Note**: Latest official release from Microsoft
+
+### VibeVoice-Large-Quant-4Bit
+- **Size**: ~7GB download
+- **Speed**: Balanced inference
+- **Quality**: Good quality
+- **Use Case**: Good quality production with less VRAM, multi-speaker conversations
+- **Note**: Quantized by DevParker
 
 Models are automatically downloaded on first use and cached in `ComfyUI/models/vibevoice/`.
 
@@ -237,7 +257,8 @@ use_sampling: False
 | Model                  | VRAM Usage | Context Length | Max Audio Duration |
 |------------------------|------------|----------------|-------------------|
 | VibeVoice-1.5B         | ~8GB | 64K tokens | ~90 minutes |
-| VibeVoice-Large | ~16GB | 32K tokens | ~45 minutes |
+| VibeVoice-Large | ~17GB | 32K tokens | ~45 minutes |
+| VibeVoice-Large-Quant-4Bit | ~7GB | 32K tokens | ~45 minutes |
 
 ## Known Limitations
 
@@ -281,6 +302,11 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.2.2
+- Added 4-bit quantized model support
+  - New model in menu: `VibeVoice-Large-Quant-4Bit` using ~7GB VRAM instead of ~17GB
+  - Requirements: NVIDIA GPU with CUDA and bitsandbytes library installed
 
 ### Version 1.2.1
 - Bug Fixing

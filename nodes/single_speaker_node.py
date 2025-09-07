@@ -34,9 +34,9 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                     "forceInput": False,
                     "dynamicPrompts": True
                 }),
-                "model": (["VibeVoice-1.5B", "VibeVoice-Large"], {
+                "model": (["VibeVoice-1.5B", "VibeVoice-Large", "VibeVoice-Large-Quant-4Bit"], {
                     "default": "VibeVoice-1.5B", 
-                    "tooltip": "Model to use. 1.5B is faster, Large has better quality"
+                    "tooltip": "Model to use. 1.5B is faster, Large has better quality, Quant-4Bit uses less VRAM (CUDA only)"
                 }),
                 "attention_type": (["auto", "eager", "sdpa", "flash_attention_2"], {
                     "default": "auto",
@@ -95,7 +95,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             # Get model mapping and load model with attention type
             model_mapping = self._get_model_mapping()
             model_path = model_mapping.get(model, model)
-            self.load_model(model_path, attention_type)
+            self.load_model(model, model_path, attention_type)
             
             # For single speaker, we just use ["Speaker 1"]
             speakers = ["Speaker 1"]

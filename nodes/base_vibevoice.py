@@ -108,8 +108,14 @@ class BaseVibeVoiceNode:
                 "and transformers>=4.51.3 is installed."
             )
     
-    def load_model(self, model_path: str, attention_type: str = "auto"):
-        """Load VibeVoice model with specified attention implementation"""
+    def load_model(self, model_name: str, model_path: str, attention_type: str = "auto"):
+        """Load VibeVoice model with specified attention implementation
+        
+        Args:
+            model_name: The display name of the model (e.g., "VibeVoice-Large-Quant-4Bit")
+            model_path: The HuggingFace model path
+            attention_type: The attention implementation to use
+        """
         # Check if we need to reload model due to attention type change
         current_attention = getattr(self, 'current_attention_type', None)
         if (self.model is None or 
@@ -145,6 +151,10 @@ class BaseVibeVoiceNode:
                 model_dir = os.path.join(comfyui_models_dir, f"models--{model_path.replace('/', '--')}")
                 model_exists_in_comfyui = os.path.exists(model_dir)
                 
+                # Check if this is a quantized model based on the model name
+                is_quantized_4bit = "Quant-4Bit" in model_name
+                is_quantized_8bit = "Quant-8Bit" in model_name  # Future support
+                
                 # Prepare attention implementation kwargs
                 model_kwargs = {
                     "cache_dir": comfyui_models_dir,
@@ -152,6 +162,35 @@ class BaseVibeVoiceNode:
                     "torch_dtype": torch.bfloat16,
                     "device_map": get_device_map(),
                 }
+                
+                # Handle 4-bit quantized model loading
+                if is_quantized_4bit:
+                    # Check if CUDA is available (required for 4-bit quantization)
+                    if not torch.cuda.is_available():
+                        raise Exception("4-bit quantized models require a CUDA GPU. Please use standard models on CPU/MPS.")
+                    
+                    # Try to import bitsandbytes
+                    try:
+                        from transformers import BitsAndBytesConfig
+                        logger.info("Loading 4-bit quantized model with bitsandbytes...")
+                        
+                        # Configure 4-bit quantization
+                        bnb_config = BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_compute_dtype=torch.bfloat16,
+                            bnb_4bit_use_double_quant=True,
+                            bnb_4bit_quant_type='nf4'
+                        )
+                        model_kwargs["quantization_config"] = bnb_config
+                        model_kwargs["device_map"] = "cuda"  # Force CUDA for 4-bit
+                        model_kwargs["subfolder"] = "4bit"  # Point to 4bit subfolder
+                        
+                    except ImportError:
+                        raise Exception(
+                            "4-bit quantized models require 'bitsandbytes' library.\n"
+                            "Please install it with: pip install bitsandbytes\n"
+                            "Or use the standard VibeVoice models instead."
+                        )
                 
                 # Set attention implementation based on user selection
                 if attention_type != "auto":
@@ -165,6 +204,9 @@ class BaseVibeVoiceNode:
                 try:
                     if model_exists_in_comfyui:
                         model_kwargs["local_files_only"] = True
+                        logger.info(f"Loading model from local cache: {model_path}")
+                        if is_quantized_4bit:
+                            logger.info(f"Using 4-bit quantization with subfolder: {model_kwargs.get('subfolder', 'None')}")
                         self.model = VibeVoiceInferenceModel.from_pretrained(
                             model_path,
                             **model_kwargs
@@ -173,6 +215,8 @@ class BaseVibeVoiceNode:
                         raise FileNotFoundError("Model not found locally")
                 except (FileNotFoundError, OSError) as e:
                     logger.info(f"Downloading {model_path}...")
+                    if is_quantized_4bit:
+                        logger.info(f"Downloading 4-bit quantized model with subfolder: {model_kwargs.get('subfolder', 'None')}")
                     
                     model_kwargs["local_files_only"] = False
                     self.model = VibeVoiceInferenceModel.from_pretrained(
@@ -183,23 +227,36 @@ class BaseVibeVoiceNode:
                 else:
                     elapsed = time.time() - start_time
                 
+                # Verify model was loaded
+                if self.model is None:
+                    raise Exception("Model failed to load - model is None after loading")
+                
                 # Load processor with proper error handling
                 from processor.vibevoice_processor import VibeVoiceProcessor
+                
+                # Prepare processor kwargs
+                processor_kwargs = {
+                    "trust_remote_code": True,
+                    "cache_dir": comfyui_models_dir
+                }
+                
+                # Add subfolder for quantized models
+                if is_quantized_4bit:
+                    processor_kwargs["subfolder"] = "4bit"
+                
                 try:
                     # First try with local files if model was loaded locally
                     if model_exists_in_comfyui:
+                        processor_kwargs["local_files_only"] = True
                         self.processor = VibeVoiceProcessor.from_pretrained(
                             model_path, 
-                            local_files_only=True,
-                            trust_remote_code=True,
-                            cache_dir=comfyui_models_dir
+                            **processor_kwargs
                         )
                     else:
                         # Download from HuggingFace
                         self.processor = VibeVoiceProcessor.from_pretrained(
                             model_path,
-                            trust_remote_code=True,
-                            cache_dir=comfyui_models_dir
+                            **processor_kwargs
                         )
                 except Exception as proc_error:
                     logger.warning(f"Failed to load processor from {model_path}: {proc_error}")
@@ -252,12 +309,15 @@ class BaseVibeVoiceNode:
                 elif 'HUGGINGFACE_HUB_CACHE' in os.environ:
                     del os.environ['HUGGINGFACE_HUB_CACHE']
                 
-                # Move to appropriate device
-                device = get_optimal_device()
-                if device == "cuda":
-                    self.model = self.model.cuda()
-                elif device == "mps":
-                    self.model = self.model.to("mps")
+                # Move to appropriate device (skip for quantized models as they use device_map)
+                if not is_quantized_4bit and not is_quantized_8bit:
+                    device = get_optimal_device()
+                    if device == "cuda":
+                        self.model = self.model.cuda()
+                    elif device == "mps":
+                        self.model = self.model.to("mps")
+                else:
+                    logger.info("Quantized model already mapped to device via device_map")
                     
                 self.current_model_path = model_path
                 self.current_attention_type = attention_type
@@ -349,7 +409,8 @@ class BaseVibeVoiceNode:
         """Get model name mappings"""
         return {
             "VibeVoice-1.5B": "microsoft/VibeVoice-1.5B",
-            "VibeVoice-Large": "aoi-ot/VibeVoice-Large"
+            "VibeVoice-Large": "aoi-ot/VibeVoice-Large",
+            "VibeVoice-Large-Quant-4Bit": "DevParker/VibeVoice7b-low-vram"
         }
     
     def _format_text_for_vibevoice(self, text: str, speakers: list) -> str:
