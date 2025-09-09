@@ -21,6 +21,15 @@ except ImportError:
     INTERRUPTION_SUPPORT = False
     logger.warning("Interruption support not available")
 
+# Check for SageAttention availability
+try:
+    from sageattention import sageattn
+    SAGE_AVAILABLE = True
+    logger.info("SageAttention available for acceleration")
+except ImportError:
+    SAGE_AVAILABLE = False
+    logger.debug("SageAttention not available - install with: pip install sageattention")
+
 def get_optimal_device():
     """Get the best available device (cuda, mps, or cpu)"""
     if torch.cuda.is_available():
@@ -108,6 +117,116 @@ class BaseVibeVoiceNode:
                 "and transformers>=4.51.3 is installed."
             )
     
+    def _apply_sage_attention(self):
+        """Apply SageAttention to the loaded model by monkey-patching attention layers"""
+        try:
+            from sageattention import sageattn
+            import torch.nn.functional as F
+            
+            # Counter for patched layers
+            patched_count = 0
+            
+            def patch_attention_forward(module):
+                """Recursively patch attention layers to use SageAttention"""
+                nonlocal patched_count
+                
+                # Check if this module has scaled_dot_product_attention
+                if hasattr(module, 'forward'):
+                    original_forward = module.forward
+                    
+                    # Create wrapper that replaces F.scaled_dot_product_attention with sageattn
+                    def sage_forward(*args, **kwargs):
+                        # Temporarily replace F.scaled_dot_product_attention
+                        original_sdpa = F.scaled_dot_product_attention
+                        
+                        def sage_sdpa(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None):
+                            """Wrapper that converts sdpa calls to sageattn"""
+                            try:
+                                # SageAttention expects tensors in specific format
+                                # Transformers typically use (batch, heads, seq_len, head_dim)
+                                
+                                # Check tensor dimensions to determine layout
+                                if query.dim() == 4:
+                                    # 4D tensor: (batch, heads, seq, dim)
+                                    batch_size = query.shape[0]
+                                    num_heads = query.shape[1]
+                                    seq_len_q = query.shape[2]
+                                    seq_len_k = key.shape[2]
+                                    head_dim = query.shape[3]
+                                    
+                                    # Reshape to (batch*heads, seq, dim) for HND layout
+                                    query_reshaped = query.reshape(batch_size * num_heads, seq_len_q, head_dim)
+                                    key_reshaped = key.reshape(batch_size * num_heads, seq_len_k, head_dim)
+                                    value_reshaped = value.reshape(batch_size * num_heads, seq_len_k, head_dim)
+                                    
+                                    # Call sageattn with HND layout
+                                    output = sageattn(
+                                        query_reshaped, key_reshaped, value_reshaped,
+                                        is_causal=is_causal,
+                                        tensor_layout="HND"  # Heads*batch, seqN, Dim
+                                    )
+                                    
+                                    # Output should be (batch*heads, seq_len_q, head_dim)
+                                    # Reshape back to (batch, heads, seq, dim)
+                                    if output.dim() == 3:
+                                        output = output.reshape(batch_size, num_heads, seq_len_q, head_dim)
+                                    
+                                    return output
+                                else:
+                                    # For 3D tensors, assume they're already in HND format
+                                    output = sageattn(
+                                        query, key, value,
+                                        is_causal=is_causal,
+                                        tensor_layout="HND"
+                                    )
+                                    return output
+                                    
+                            except Exception as e:
+                                # If SageAttention fails, fall back to original implementation
+                                logger.debug(f"SageAttention failed, using original: {e}")
+                                # Call with proper arguments - scale is a keyword argument in PyTorch 2.0+
+                                if scale is not None:
+                                    return original_sdpa(query, key, value, attn_mask=attn_mask, 
+                                                       dropout_p=dropout_p, is_causal=is_causal, scale=scale)
+                                else:
+                                    return original_sdpa(query, key, value, attn_mask=attn_mask, 
+                                                       dropout_p=dropout_p, is_causal=is_causal)
+                        
+                        # Replace the function
+                        F.scaled_dot_product_attention = sage_sdpa
+                        
+                        try:
+                            # Call original forward with patched attention
+                            result = original_forward(*args, **kwargs)
+                        finally:
+                            # Restore original function
+                            F.scaled_dot_product_attention = original_sdpa
+                        
+                        return result
+                    
+                    # Check if this module likely uses attention
+                    # Look for common attention module names
+                    module_name = module.__class__.__name__.lower()
+                    if any(name in module_name for name in ['attention', 'attn', 'multihead']):
+                        module.forward = sage_forward
+                        patched_count += 1
+                
+                # Recursively patch child modules
+                for child in module.children():
+                    patch_attention_forward(child)
+            
+            # Apply patching to the entire model
+            patch_attention_forward(self.model)
+            
+            logger.info(f"Patched {patched_count} attention layers with SageAttention")
+            
+            if patched_count == 0:
+                logger.warning("No attention layers found to patch - SageAttention may not be applied")
+                
+        except Exception as e:
+            logger.error(f"Failed to apply SageAttention: {e}")
+            logger.warning("Continuing with standard attention implementation")
+    
     def load_model(self, model_name: str, model_path: str, attention_type: str = "auto"):
         """Load VibeVoice model with specified attention implementation
         
@@ -193,7 +312,21 @@ class BaseVibeVoiceNode:
                         )
                 
                 # Set attention implementation based on user selection
-                if attention_type != "auto":
+                use_sage_attention = False
+                if attention_type == "sage":
+                    # SageAttention requires special handling - can't be set via attn_implementation
+                    if not SAGE_AVAILABLE:
+                        logger.warning("SageAttention not installed, falling back to sdpa")
+                        logger.warning("Install with: pip install sageattention")
+                        model_kwargs["attn_implementation"] = "sdpa"
+                    elif not torch.cuda.is_available():
+                        logger.warning("SageAttention requires CUDA GPU, falling back to sdpa")
+                        model_kwargs["attn_implementation"] = "sdpa"
+                    else:
+                        # Don't set attn_implementation for sage, will apply after loading
+                        use_sage_attention = True
+                        logger.info("Will apply SageAttention after model loading")
+                elif attention_type != "auto":
                     model_kwargs["attn_implementation"] = attention_type
                     logger.info(f"Using {attention_type} attention implementation")
                 else:
@@ -318,6 +451,11 @@ class BaseVibeVoiceNode:
                         self.model = self.model.to("mps")
                 else:
                     logger.info("Quantized model already mapped to device via device_map")
+                
+                # Apply SageAttention if requested and available
+                if use_sage_attention and SAGE_AVAILABLE:
+                    self._apply_sage_attention()
+                    logger.info("SageAttention successfully applied to model")
                     
                 self.current_model_path = model_path
                 self.current_attention_type = attention_type
@@ -489,7 +627,7 @@ class BaseVibeVoiceNode:
             
             # Estimate tokens for user information (not used as limit)
             text_length = len(formatted_text.split())
-            estimated_tokens = text_length * 2.5  # More accurate estimate for display
+            estimated_tokens = int(text_length * 2.5)  # More accurate estimate for display
             
             # Log generation start with explanation
             logger.info(f"Generating audio with {diffusion_steps} diffusion steps...")

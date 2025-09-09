@@ -20,7 +20,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 🔧 **Flexible Configuration**: Control temperature, sampling, and guidance scale
 
 ### Performance & Optimization
-- ⚡ **Attention Mechanisms**: Choose between auto, eager, sdpa, or flash_attention_2
+- ⚡ **Attention Mechanisms**: Choose between auto, eager, sdpa, flash_attention_2 or sage
 - 🎛️ **Diffusion Steps**: Adjustable quality vs speed trade-off (default: 20)
 - 💾 **Memory Management**: Toggle automatic VRAM cleanup after generation
 - 🧹 **Free Memory Node**: Manual memory control for complex workflows
@@ -68,7 +68,7 @@ Generates speech from text using a single voice.
 - **Parameters** (in order):
   - `text`: Input text to convert to speech
   - `model`: VibeVoice-1.5B, VibeVoice-Large or VibeVoice-Large-Quant-4Bit
-  - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
+  - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
   - `seed`: Random seed for reproducibility (default: 42)
@@ -87,7 +87,7 @@ Generates multi-speaker conversations with distinct voices.
 - **Parameters** (in order):
   - `text`: Input text with speaker labels
   - `model`: VibeVoice-1.5B, VibeVoice-Large or VibeVoice-Large-Quant-4Bit
-  - `attention_type`: auto, eager, sdpa, or flash_attention_2 (default: auto)
+  - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
   - `seed`: Random seed for reproducibility (default: 42)
@@ -302,6 +302,11 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.2.3
+- Added SageAttention support for inference speedup
+  - New attention option "sage" using quantized attention (INT8/FP8) for faster generation
+  - Requirements: NVIDIA GPU with CUDA and sageattention library installation
 
 ### Version 1.2.2
 - Added 4-bit quantized model support

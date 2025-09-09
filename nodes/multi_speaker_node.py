@@ -38,9 +38,9 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                     "default": "VibeVoice-Large",  # Large recommended for multi-speaker
                     "tooltip": "Model to use. Large is recommended for multi-speaker generation, Quant-4Bit uses less VRAM (CUDA only)"
                 }),
-                "attention_type": (["auto", "eager", "sdpa", "flash_attention_2"], {
+                "attention_type": (["auto", "eager", "sdpa", "flash_attention_2", "sage"], {
                     "default": "auto",
-                    "tooltip": "Attention implementation. Auto selects the best available, eager is standard, sdpa is optimized PyTorch, flash_attention_2 requires compatible GPU"
+                    "tooltip": "Attention implementation. Auto selects the best available, eager is standard, sdpa is optimized PyTorch, flash_attention_2 requires compatible GPU, sage uses quantized attention for speedup (CUDA only)"
                 }),
                 "free_memory_after_generate": ("BOOLEAN", {"default": True, "tooltip": "Free model from memory after generation to save VRAM/RAM. Disable to keep model loaded for faster subsequent generations"}),
                 "diffusion_steps": ("INT", {"default": 20, "min": 5, "max": 100, "step": 1, "tooltip": "Number of denoising steps. More steps = better quality but slower. Default: 20"}),
