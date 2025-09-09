@@ -9,6 +9,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 👥 **Multi-Speaker Conversations**: Support for up to 4 distinct speakers
 - 🎯 **Voice Cloning**: Clone voices from audio samples
 - 📝 **Text File Loading**: Load scripts from text files
+- 📚 **Automatic Text Chunking**: Handles long texts seamlessly with configurable chunk size
 - 🔄 **Node Chaining**: Connect multiple VibeVoice nodes for complex workflows
 - ⏹️ **Interruption Support**: Cancel operations before or between generations
 
@@ -78,6 +79,7 @@ Generates speech from text using a single voice.
   - `voice_to_clone`: Audio input for voice cloning
   - `temperature`: Sampling temperature (0.1-2.0, default: 0.95)
   - `top_p`: Nucleus sampling parameter (0.1-1.0, default: 0.95)
+  - `max_words_per_chunk`: Maximum words per chunk for long texts (100-500, default: 250)
 
 ### 3. VibeVoice Multiple Speakers
 Generates multi-speaker conversations with distinct voices.
@@ -302,6 +304,13 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.2.4
+- Added automatic text chunking for long texts in Single Speaker node
+  - Single Speaker node now automatically splits texts longer than 250 words to prevent audio acceleration issues
+  - New optional parameter `max_words_per_chunk` (range: 100-500 words, default: 250)
+  - Maintains consistent voice characteristics across all chunks using the same seed
+  - Seamlessly concatenates audio chunks for smooth, natural output
 
 ### Version 1.2.3
 - Added SageAttention support for inference speedup

@@ -52,6 +52,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                 "voice_to_clone": ("AUDIO", {"tooltip": "Optional: Reference voice to clone. If not provided, synthetic voice will be used."}),
                 "temperature": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 2.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
+                "max_words_per_chunk": ("INT", {"default": 250, "min": 100, "max": 500, "step": 50, "tooltip": "Maximum words per chunk for long texts. Lower values prevent speed issues but create more chunks."}),
             }
         }
 
@@ -82,7 +83,8 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                        attention_type: str = "auto", free_memory_after_generate: bool = True,
                        diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
                        use_sampling: bool = False, voice_to_clone=None,
-                       temperature: float = 0.95, top_p: float = 0.95):
+                       temperature: float = 0.95, top_p: float = 0.95,
+                       max_words_per_chunk: int = 250):
         """Generate speech from text using VibeVoice"""
         
         try:
@@ -100,17 +102,74 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             # For single speaker, we just use ["Speaker 1"]
             speakers = ["Speaker 1"]
             
-            # Format text for VibeVoice
-            formatted_text = self._format_text_for_vibevoice(final_text, speakers)
+            # Check if text is long and needs chunking
+            word_count = len(final_text.split())
             
-            # Create or use voice samples
-            voice_samples = self._prepare_voice_samples(speakers, voice_to_clone)
-            
-            # Generate audio using base class method
-            audio_dict = self._generate_with_vibevoice(
-                formatted_text, voice_samples, cfg_scale, seed, diffusion_steps, 
-                use_sampling, temperature, top_p
-            )
+            if word_count > max_words_per_chunk:
+                logger.info(f"Text has {word_count} words, splitting into chunks...")
+                text_chunks = self._split_text_into_chunks(final_text, max_words_per_chunk)
+                
+                # Generate audio for each chunk
+                audio_chunks = []
+                for i, chunk in enumerate(text_chunks):
+                    logger.info(f"Processing chunk {i+1}/{len(text_chunks)}...")
+                    
+                    # Format chunk for VibeVoice
+                    formatted_text = self._format_text_for_vibevoice(chunk, speakers)
+                    
+                    # Create or use voice samples (reuse same voice for consistency)
+                    if i == 0:
+                        # First chunk - create/prepare voice samples
+                        voice_samples = self._prepare_voice_samples(speakers, voice_to_clone)
+                    # Reuse same voice_samples for all chunks for consistency
+                    
+                    # Generate audio for this chunk
+                    chunk_audio = self._generate_with_vibevoice(
+                        formatted_text, voice_samples, cfg_scale, 
+                        seed,  # Use same seed for voice consistency across chunks
+                        diffusion_steps, use_sampling, temperature, top_p
+                    )
+                    
+                    audio_chunks.append(chunk_audio)
+                
+                # Concatenate all audio chunks
+                logger.info(f"Concatenating {len(audio_chunks)} audio chunks...")
+                
+                # Extract waveforms from all chunks
+                waveforms = []
+                sample_rate = 24000  # VibeVoice uses 24kHz
+                
+                for chunk_audio in audio_chunks:
+                    if isinstance(chunk_audio, dict) and "waveform" in chunk_audio:
+                        waveforms.append(chunk_audio["waveform"])
+                
+                if waveforms:
+                    # Concatenate along the time dimension (last dimension)
+                    combined_waveform = torch.cat(waveforms, dim=-1)
+                    
+                    # Create final audio dict
+                    audio_dict = {
+                        "waveform": combined_waveform,
+                        "sample_rate": sample_rate
+                    }
+                    logger.info(f"Successfully generated audio from {len(text_chunks)} chunks")
+                else:
+                    raise Exception("Failed to generate audio chunks")
+            else:
+                # Text is short enough, process normally
+                logger.info(f"Text has {word_count} words, processing as single chunk")
+                
+                # Format text for VibeVoice
+                formatted_text = self._format_text_for_vibevoice(final_text, speakers)
+                
+                # Create or use voice samples
+                voice_samples = self._prepare_voice_samples(speakers, voice_to_clone)
+                
+                # Generate audio using base class method
+                audio_dict = self._generate_with_vibevoice(
+                    formatted_text, voice_samples, cfg_scale, seed, diffusion_steps, 
+                    use_sampling, temperature, top_p
+                )
             
             # Free memory if requested
             if free_memory_after_generate:
