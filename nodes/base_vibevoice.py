@@ -139,8 +139,13 @@ class BaseVibeVoiceNode:
                         # Temporarily replace F.scaled_dot_product_attention
                         original_sdpa = F.scaled_dot_product_attention
                         
-                        def sage_sdpa(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None):
+                        def sage_sdpa(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
                             """Wrapper that converts sdpa calls to sageattn"""
+                            # Log any unexpected parameters for debugging
+                            if kwargs:
+                                unexpected_params = list(kwargs.keys())
+                                logger.debug(f"SageAttention: Ignoring unsupported parameters: {unexpected_params}")
+                            
                             try:
                                 # SageAttention expects tensors in specific format
                                 # Transformers typically use (batch, heads, seq_len, head_dim)
@@ -185,12 +190,13 @@ class BaseVibeVoiceNode:
                                 # If SageAttention fails, fall back to original implementation
                                 logger.debug(f"SageAttention failed, using original: {e}")
                                 # Call with proper arguments - scale is a keyword argument in PyTorch 2.0+
+                                # Pass through any additional kwargs that the original sdpa might support
                                 if scale is not None:
                                     return original_sdpa(query, key, value, attn_mask=attn_mask, 
-                                                       dropout_p=dropout_p, is_causal=is_causal, scale=scale)
+                                                       dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs)
                                 else:
                                     return original_sdpa(query, key, value, attn_mask=attn_mask, 
-                                                       dropout_p=dropout_p, is_causal=is_causal)
+                                                       dropout_p=dropout_p, is_causal=is_causal, **kwargs)
                         
                         # Replace the function
                         F.scaled_dot_product_attention = sage_sdpa
