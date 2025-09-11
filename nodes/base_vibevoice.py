@@ -644,6 +644,68 @@ class BaseVibeVoiceNode:
         
         return chunks
     
+    def _parse_pause_keywords(self, text: str) -> List[Tuple[str, Any]]:
+        """Parse [pause] and [pause:ms] keywords from text
+        
+        Args:
+            text: Text potentially containing pause keywords
+            
+        Returns:
+            List of tuples: ('text', str) or ('pause', duration_ms)
+        """
+        segments = []
+        # Pattern matches [pause] or [pause:1500] where 1500 is milliseconds
+        pattern = r'\[pause(?::(\d+))?\]'
+        
+        last_end = 0
+        for match in re.finditer(pattern, text):
+            # Add text segment before pause (if any)
+            if match.start() > last_end:
+                text_segment = text[last_end:match.start()].strip()
+                if text_segment:  # Only add non-empty text segments
+                    segments.append(('text', text_segment))
+            
+            # Add pause segment with duration (default 1000ms = 1 second)
+            duration_ms = int(match.group(1)) if match.group(1) else 1000
+            segments.append(('pause', duration_ms))
+            last_end = match.end()
+        
+        # Add remaining text after last pause (if any)
+        if last_end < len(text):
+            remaining_text = text[last_end:].strip()
+            if remaining_text:
+                segments.append(('text', remaining_text))
+        
+        # If no pauses found, return original text as single segment
+        if not segments:
+            segments.append(('text', text))
+        
+        logger.debug(f"Parsed text into {len(segments)} segments (including pauses)")
+        return segments
+    
+    def _generate_silence(self, duration_ms: int, sample_rate: int = 24000) -> dict:
+        """Generate silence audio tensor for specified duration
+        
+        Args:
+            duration_ms: Duration of silence in milliseconds
+            sample_rate: Sample rate (default 24000 Hz for VibeVoice)
+            
+        Returns:
+            Audio dict with silence waveform
+        """
+        # Calculate number of samples for the duration
+        num_samples = int(sample_rate * duration_ms / 1000.0)
+        
+        # Create silence tensor with shape (1, 1, num_samples) to match audio format
+        silence_waveform = torch.zeros(1, 1, num_samples, dtype=torch.float32)
+        
+        logger.info(f"Generated {duration_ms}ms silence ({num_samples} samples)")
+        
+        return {
+            "waveform": silence_waveform,
+            "sample_rate": sample_rate
+        }
+    
     def _format_text_for_vibevoice(self, text: str, speakers: list) -> str:
         """Format text with speaker information for VibeVoice using correct format"""
         # Remove any newlines from the text to prevent parsing issues

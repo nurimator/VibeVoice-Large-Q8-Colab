@@ -114,10 +114,28 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 else:
                     # No speaker format found
                     speakers_in_text = [1]
-                    # Clean up newlines before assigning to speaker
-                    text_clean = text.replace('\n', ' ').replace('\r', ' ')
-                    text_clean = ' '.join(text_clean.split())
-                    converted_text = f"Speaker 0: {text_clean}"
+                    
+                    # Parse pause keywords even for single speaker
+                    pause_segments = self._parse_pause_keywords(text)
+                    
+                    # Store speaker segments for pause processing
+                    speaker_segments_with_pauses = []
+                    segments = []
+                    
+                    for seg_type, seg_content in pause_segments:
+                        if seg_type == 'pause':
+                            speaker_segments_with_pauses.append(('pause', seg_content, None))
+                        else:
+                            # Clean up newlines
+                            text_clean = seg_content.replace('\n', ' ').replace('\r', ' ')
+                            text_clean = ' '.join(text_clean.split())
+                            
+                            if text_clean:
+                                speaker_segments_with_pauses.append(('text', text_clean, 1))
+                                segments.append(f"Speaker 0: {text_clean}")
+                    
+                    # Join all segments for fallback
+                    converted_text = '\n'.join(segments) if segments else f"Speaker 0: {text}"
             else:
                 # Convert [N]: directly to Speaker (N-1): and handle multi-line text
                 # Split text to preserve speaker segments while cleaning up newlines within each segment
@@ -125,6 +143,9 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 
                 # Find all speaker markers with their positions
                 speaker_matches = list(re.finditer(f'\\[({"|".join(map(str, speakers_in_text))})\\]\\s*:', converted_text))
+                
+                # Store speaker segments for pause processing
+                speaker_segments_with_pauses = []
                 
                 for i, match in enumerate(speaker_matches):
                     speaker_num = int(match.group(1))
@@ -136,18 +157,30 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                     else:
                         end = len(converted_text)
                     
-                    # Extract and clean the speaker's text
+                    # Extract the speaker's text (keep pause keywords for now)
                     speaker_text = converted_text[start:end].strip()
-                    # Replace newlines with spaces within each speaker's text
-                    speaker_text = speaker_text.replace('\n', ' ').replace('\r', ' ')
-                    # Clean up multiple spaces
-                    speaker_text = ' '.join(speaker_text.split())
                     
-                    # Add the cleaned segment with proper speaker label
-                    segments.append(f'Speaker {speaker_num - 1}: {speaker_text}')
+                    # Parse pause keywords within this speaker's text
+                    pause_segments = self._parse_pause_keywords(speaker_text)
+                    
+                    # Process each segment (text or pause) for this speaker
+                    for seg_type, seg_content in pause_segments:
+                        if seg_type == 'pause':
+                            # Add pause segment
+                            speaker_segments_with_pauses.append(('pause', seg_content, None))
+                        else:
+                            # Clean up the text segment
+                            text_clean = seg_content.replace('\n', ' ').replace('\r', ' ')
+                            text_clean = ' '.join(text_clean.split())
+                            
+                            if text_clean:  # Only add non-empty text
+                                # Add text segment with speaker info
+                                speaker_segments_with_pauses.append(('text', text_clean, speaker_num))
+                                # Also build the traditional segments for fallback
+                                segments.append(f'Speaker {speaker_num - 1}: {text_clean}')
                 
-                # Join all segments with newlines (required for multi-speaker format)
-                converted_text = '\n'.join(segments)
+                # Join all segments with newlines (required for multi-speaker format) - for fallback
+                converted_text = '\n'.join(segments) if segments else ""
             
             # Build speaker names list - these are just for logging, not used by processor
             # The processor uses the speaker labels in the text itself
@@ -182,11 +215,105 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 logger.error(f"Mismatch: {len(speakers_in_text)} speakers but {len(voice_samples)} voice samples!")
                 raise Exception(f"Voice sample count mismatch: expected {len(speakers_in_text)}, got {len(voice_samples)}")
             
-            # Generate audio with converted text (0-based speaker indexing)
-            audio_dict = self._generate_with_vibevoice(
-                converted_text, voice_samples, cfg_scale, seed, diffusion_steps,
-                use_sampling, temperature, top_p
-            )
+            # Check if we have pause segments to process
+            if 'speaker_segments_with_pauses' in locals() and speaker_segments_with_pauses:
+                # Process segments with pauses
+                all_audio_segments = []
+                sample_rate = 24000  # VibeVoice uses 24kHz
+                
+                # Group consecutive text segments from same speaker for efficiency
+                grouped_segments = []
+                current_group = []
+                current_speaker = None
+                
+                for seg_type, seg_content, speaker_num in speaker_segments_with_pauses:
+                    if seg_type == 'pause':
+                        # Save current group if any
+                        if current_group:
+                            grouped_segments.append(('text_group', current_group, current_speaker))
+                            current_group = []
+                            current_speaker = None
+                        # Add pause
+                        grouped_segments.append(('pause', seg_content, None))
+                    else:
+                        # Text segment
+                        if speaker_num == current_speaker:
+                            # Same speaker, add to current group
+                            current_group.append(seg_content)
+                        else:
+                            # Different speaker, save current group and start new one
+                            if current_group:
+                                grouped_segments.append(('text_group', current_group, current_speaker))
+                            current_group = [seg_content]
+                            current_speaker = speaker_num
+                
+                # Save last group if any
+                if current_group:
+                    grouped_segments.append(('text_group', current_group, current_speaker))
+                
+                # Process grouped segments
+                for seg_type, seg_content, speaker_num in grouped_segments:
+                    if seg_type == 'pause':
+                        # Generate silence
+                        duration_ms = seg_content
+                        logger.info(f"Adding {duration_ms}ms pause")
+                        silence_audio = self._generate_silence(duration_ms, sample_rate)
+                        all_audio_segments.append(silence_audio)
+                    else:
+                        # Process text group for a speaker
+                        combined_text = ' '.join(seg_content)
+                        formatted_text = f"Speaker {speaker_num - 1}: {combined_text}"
+                        
+                        # Get voice sample for this speaker
+                        speaker_idx = speakers_in_text.index(speaker_num)
+                        speaker_voice_samples = [voice_samples[speaker_idx]]
+                        
+                        logger.info(f"Generating audio for Speaker {speaker_num}: {len(combined_text.split())} words")
+                        
+                        # Generate audio for this speaker's text
+                        segment_audio = self._generate_with_vibevoice(
+                            formatted_text, speaker_voice_samples, cfg_scale, seed,
+                            diffusion_steps, use_sampling, temperature, top_p
+                        )
+                        
+                        all_audio_segments.append(segment_audio)
+                
+                # Concatenate all audio segments
+                if all_audio_segments:
+                    logger.info(f"Concatenating {len(all_audio_segments)} audio segments (including pauses)...")
+                    
+                    # Extract waveforms
+                    waveforms = []
+                    for audio_segment in all_audio_segments:
+                        if isinstance(audio_segment, dict) and "waveform" in audio_segment:
+                            waveforms.append(audio_segment["waveform"])
+                    
+                    if waveforms:
+                        # Filter out None values if any
+                        valid_waveforms = [w for w in waveforms if w is not None]
+                        
+                        if valid_waveforms:
+                            # Concatenate along time dimension
+                            combined_waveform = torch.cat(valid_waveforms, dim=-1)
+                            
+                            audio_dict = {
+                                "waveform": combined_waveform,
+                                "sample_rate": sample_rate
+                            }
+                            logger.info(f"Successfully generated multi-speaker audio with pauses")
+                        else:
+                            raise Exception("No valid audio waveforms generated")
+                    else:
+                        raise Exception("Failed to extract waveforms from audio segments")
+                else:
+                    raise Exception("No audio segments generated")
+            else:
+                # Fallback to original method without pause support
+                logger.info("Processing without pause support (no pause keywords found)")
+                audio_dict = self._generate_with_vibevoice(
+                    converted_text, voice_samples, cfg_scale, seed, diffusion_steps,
+                    use_sampling, temperature, top_p
+                )
             
             # Free memory if requested
             if free_memory_after_generate:

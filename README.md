@@ -10,6 +10,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 🎯 **Voice Cloning**: Clone voices from audio samples
 - 📝 **Text File Loading**: Load scripts from text files
 - 📚 **Automatic Text Chunking**: Handles long texts seamlessly with configurable chunk size
+- ⏸️ **Custom Pause Tags**: Insert silences with `[pause]` and `[pause:ms]` tags (wrapper feature)
 - 🔄 **Node Chaining**: Connect multiple VibeVoice nodes for complex workflows
 - ⏹️ **Interruption Support**: Cancel operations before or between generations
 
@@ -174,17 +175,66 @@ To clone a voice:
 - Minimum 3–10 seconds. Recommended at least 30 seconds for better quality
 - Automatically resampled to 24kHz
 
+## Pause Tags Support
+
+### Overview
+The VibeVoice wrapper includes a custom pause tag feature that allows you to insert silences between text segments. **This is NOT a standard Microsoft VibeVoice feature** - it's an original implementation of our wrapper to provide more control over speech pacing.
+
+**Available from version 1.3.0**
+
+### Usage
+You can use two types of pause tags in your text:
+- `[pause]` - Inserts a 1-second silence (default)
+- `[pause:ms]` - Inserts a custom duration silence in milliseconds (e.g., `[pause:2000]` for 2 seconds)
+
+### Examples
+
+#### Single Speaker
+```
+Welcome to our presentation. [pause] Today we'll explore artificial intelligence. [pause:500] Let's begin!
+```
+
+#### Multi-Speaker  
+```
+[1]: Hello everyone [pause] how are you doing today?
+[2]: I'm doing great! [pause:500] Thanks for asking.
+[1]: Wonderful to hear!
+```
+
+### Important Notes
+
+⚠️ **Context Limitation Warning**:
+> **Note: The pause forces the text to be split into chunks. This may worsen the model's ability to understand the context. The model's context is represented ONLY by its own chunk.**
+
+This means:
+- Text before a pause and text after a pause are processed separately
+- The model cannot see across pause boundaries when generating speech
+- This may affect prosody and intonation consistency
+- Use pauses sparingly for best results
+
+### How It Works
+1. The wrapper parses your text to find pause tags
+2. Text segments between pauses are processed independently 
+3. Silence audio is generated for each pause duration
+4. All audio segments (speech and silence) are concatenated
+
+### Best Practices
+- Use pauses at natural breaking points (end of sentences, paragraphs)
+- Avoid pauses in the middle of phrases where context is important
+- Test different pause durations to find what sounds most natural
+
 ## Tips for Best Results
 
 1. **Text Preparation**:
    - Use proper punctuation for natural pauses
    - Break long texts into paragraphs
    - For multi-speaker, ensure clear speaker transitions
+   - Use pause tags sparingly to maintain context continuity
 
 2. **Model Selection**:
    - Use 1.5B for quick single-speaker tasks (fastest, ~8GB VRAM)
-   - Use Large for best quality (~16GB VRAM)
    - Use Large for best quality and multi-speaker (~16GB VRAM)
+   - Use Large-Quant-4Bit for good quality and low VRAM usage (~7GB VRAM)
 
 3. **Seed Management**:
    - Default seed (42) works well for most cases
@@ -304,6 +354,14 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.3.0
+- Added custom pause tag support for speech pacing control
+  - New `[pause]` tag for 1-second silence (default)
+  - New `[pause:ms]` tag for custom duration in milliseconds (e.g., `[pause:2000]` for 2 seconds)
+  - Works with both Single Speaker and Multiple Speakers nodes
+  - Automatically splits text at pause points while maintaining voice consistency
+  - Note: This is a wrapper feature, not part of Microsoft's VibeVoice
 
 ### Version 1.2.5
 - Bug Fixing
