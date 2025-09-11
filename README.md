@@ -305,6 +305,9 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.2.5
+- Bug Fixing
+
 ### Version 1.2.4
 - Added automatic text chunking for long texts in Single Speaker node
   - Single Speaker node now automatically splits texts longer than 250 words to prevent audio acceleration issues

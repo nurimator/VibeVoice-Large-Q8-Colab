@@ -246,6 +246,12 @@ class BaseVibeVoiceNode:
         if (self.model is None or 
             getattr(self, 'current_model_path', None) != model_path or
             current_attention != attention_type):
+            
+            # Free existing model before loading new one (important for attention type changes)
+            if self.model is not None and (current_attention != attention_type or getattr(self, 'current_model_path', None) != model_path):
+                logger.info(f"Freeing existing model before loading with new settings (attention: {current_attention} -> {attention_type})")
+                self.free_memory()
+            
             try:
                 vibevoice, VibeVoiceInferenceModel = self._check_dependencies()
                 
