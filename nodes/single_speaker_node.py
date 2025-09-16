@@ -50,6 +50,12 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             },
             "optional": {
                 "voice_to_clone": ("AUDIO", {"tooltip": "Optional: Reference voice to clone. If not provided, synthetic voice will be used."}),
+                "lora_path": ("STRING", {"default": "", "tooltip": "Absolute path to a LoRA folder containing adapter_config.json, adapter_model.safetensors, and optional diffusion_head/config.json + model.safetensors. Applied on top of the selected base model."}),
+                "use_llm_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply LLM (language model) LoRA component when a LoRA path is provided."}),
+                "llm_lora_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05, "tooltip": "Strength of the LLM LoRA adapter. Only used if a LoRA path is provided and the LLM LoRA is enabled."}),
+                "use_diffusion_head_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply diffusion head LoRA / replacement when a LoRA path is provided."}),
+                "use_acoustic_connector_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply acoustic connector LoRA component when available in the LoRA folder."}),
+                "use_semantic_connector_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply semantic connector LoRA component when available in the LoRA folder."}),
                 "temperature": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 2.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "max_words_per_chunk": ("INT", {"default": 250, "min": 100, "max": 500, "step": 50, "tooltip": "Maximum words per chunk for long texts. Lower values prevent speed issues but create more chunks."}),
@@ -80,11 +86,14 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
         return voice_samples
     
     def generate_speech(self, text: str = "", model: str = "VibeVoice-1.5B", 
-                       attention_type: str = "auto", free_memory_after_generate: bool = True,
-                       diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
-                       use_sampling: bool = False, voice_to_clone=None,
-                       temperature: float = 0.95, top_p: float = 0.95,
-                       max_words_per_chunk: int = 250):
+                        attention_type: str = "auto", free_memory_after_generate: bool = True,
+                        diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
+                        use_sampling: bool = False, voice_to_clone=None,
+                        lora_path: str = "", use_llm_lora: bool = True, llm_lora_strength: float = 1.0,
+                        use_diffusion_head_lora: bool = True, use_acoustic_connector_lora: bool = True,
+                        use_semantic_connector_lora: bool = True,
+                        temperature: float = 0.95, top_p: float = 0.95,
+                        max_words_per_chunk: int = 250):
         """Generate speech from text using VibeVoice"""
         
         try:
@@ -97,7 +106,15 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             # Get model mapping and load model with attention type
             model_mapping = self._get_model_mapping()
             model_path = model_mapping.get(model, model)
-            self.load_model(model, model_path, attention_type)
+            
+            lora_path_final = lora_path if isinstance(lora_path, str) and lora_path.strip() else None
+
+            # Store LoRA component usage preferences on the instance so the base loader can inspect them.
+            self.use_llm_lora = use_llm_lora
+            self.use_diffusion_head_lora = use_diffusion_head_lora
+            self.use_acoustic_connector_lora = use_acoustic_connector_lora
+            self.use_semantic_connector_lora = use_semantic_connector_lora
+            self.load_model(model, model_path, attention_type, lora_path=lora_path_final)
             
             # For single speaker, we just use ["Speaker 1"]
             speakers = ["Speaker 1"]
@@ -141,7 +158,8 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                             chunk_audio = self._generate_with_vibevoice(
                                 formatted_text, voice_samples, cfg_scale, 
                                 seed,  # Use same seed for voice consistency
-                                diffusion_steps, use_sampling, temperature, top_p
+                                diffusion_steps, use_sampling, temperature, top_p,
+                                llm_lora_strength=llm_lora_strength
                             )
                             
                             all_audio_segments.append(chunk_audio)
@@ -159,7 +177,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                         # Generate audio
                         segment_audio = self._generate_with_vibevoice(
                             formatted_text, voice_samples, cfg_scale, seed, diffusion_steps, 
-                            use_sampling, temperature, top_p
+                            use_sampling, temperature, top_p, llm_lora_strength=llm_lora_strength
                         )
                         
                         all_audio_segments.append(segment_audio)
@@ -217,4 +235,11 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
     def IS_CHANGED(cls, text="", model="VibeVoice-1.5B", voice_to_clone=None, **kwargs):
         """Cache key for ComfyUI"""
         voice_hash = hash(str(voice_to_clone)) if voice_to_clone else 0
-        return f"{hash(text)}_{model}_{voice_hash}_{kwargs.get('cfg_scale', 1.3)}_{kwargs.get('seed', 0)}"
+        lora_path = kwargs.get('lora_path', '') or ''
+        use_llm = kwargs.get('use_llm_lora', True)
+        llm_lora_strength = kwargs.get('llm_lora_strength', 1.0)
+        use_diff = kwargs.get('use_diffusion_head_lora', True)
+        use_acoustic = kwargs.get('use_acoustic_connector_lora', True)
+        use_semantic = kwargs.get('use_semantic_connector_lora', True)
+        lora_settings_hash = f"{hash(lora_path)}_{int(use_llm)}_{llm_lora_strength}_{int(use_diff)}_{int(use_acoustic)}_{int(use_semantic)}"
+        return f"{hash(text)}_{model}_{voice_hash}_{lora_settings_hash}_{kwargs.get('cfg_scale', 1.3)}_{kwargs.get('seed', 0)}"
