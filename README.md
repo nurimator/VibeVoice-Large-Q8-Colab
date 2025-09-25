@@ -446,6 +446,9 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.4.2
+- Bug Fixing
+
 ### Version 1.4.1
 - Fixed HuggingFace authentication error when loading locally cached models
   - Resolved 401 authorization errors for already downloaded models
