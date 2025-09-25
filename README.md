@@ -446,6 +446,12 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.4.1
+- Fixed HuggingFace authentication error when loading locally cached models
+  - Resolved 401 authorization errors for already downloaded models
+  - Node now correctly uses local model snapshots without requiring HuggingFace API authentication
+  - Prevents unnecessary API calls when models exist in `ComfyUI/models/vibevoice/`
+
 ### Version 1.4.0
 - Added LoRA (Low-Rank Adaptation) support for fine-tuned models
   - New "VibeVoice LoRA" node for configuring custom voice adaptations

@@ -377,10 +377,21 @@ class BaseVibeVoiceNode:
                 # Check if model exists locally
                 model_dir = os.path.join(comfyui_models_dir, f"models--{model_path.replace('/', '--')}")
                 model_exists_in_comfyui = os.path.exists(model_dir)
+
+                # Also check for direct local path format (for manual downloads)
+                snapshot_dir = None
+                if model_exists_in_comfyui:
+                    # Look for snapshot folder
+                    snapshots_dir = os.path.join(model_dir, "snapshots")
+                    if os.path.exists(snapshots_dir):
+                        # Get the most recent snapshot
+                        snapshots = [d for d in os.listdir(snapshots_dir) if os.path.isdir(os.path.join(snapshots_dir, d))]
+                        if snapshots:
+                            snapshot_dir = os.path.join(snapshots_dir, snapshots[0])
+                            logger.info(f"Found local model snapshot: {snapshot_dir}")
                 
                 # Check if this is a quantized model based on the model name
                 is_quantized_4bit = "Quant-4Bit" in model_name
-                is_quantized_8bit = "Quant-8Bit" in model_name  # Future support
                 
                 # Prepare attention implementation kwargs
                 model_kwargs = {
@@ -395,12 +406,12 @@ class BaseVibeVoiceNode:
                     # Check if CUDA is available (required for 4-bit quantization)
                     if not torch.cuda.is_available():
                         raise Exception("4-bit quantized models require a CUDA GPU. Please use standard models on CPU/MPS.")
-                    
+
                     # Try to import bitsandbytes
                     try:
                         from transformers import BitsAndBytesConfig
                         logger.info("Loading 4-bit quantized model with bitsandbytes...")
-                        
+
                         # Configure 4-bit quantization
                         bnb_config = BitsAndBytesConfig(
                             load_in_4bit=True,
@@ -411,7 +422,7 @@ class BaseVibeVoiceNode:
                         model_kwargs["quantization_config"] = bnb_config
                         model_kwargs["device_map"] = "cuda"  # Force CUDA for 4-bit
                         model_kwargs["subfolder"] = "4bit"  # Point to 4bit subfolder
-                        
+
                     except ImportError:
                         raise Exception(
                             "4-bit quantized models require 'bitsandbytes' library.\n"
@@ -443,7 +454,19 @@ class BaseVibeVoiceNode:
                 
                 # Try to load locally first
                 try:
-                    if model_exists_in_comfyui:
+                    if model_exists_in_comfyui and snapshot_dir:
+                        # Use direct local path to avoid HuggingFace API calls
+                        model_kwargs["local_files_only"] = True
+                        logger.info(f"Loading model from local snapshot: {snapshot_dir}")
+                        if is_quantized_4bit:
+                            logger.info(f"Using 4-bit quantization with subfolder: {model_kwargs.get('subfolder', 'None')}")
+                        # Use snapshot directory directly
+                        self.model = VibeVoiceInferenceModel.from_pretrained(
+                            snapshot_dir,
+                            **model_kwargs
+                        )
+                    elif model_exists_in_comfyui:
+                        # Try with HuggingFace ID but force local only
                         model_kwargs["local_files_only"] = True
                         logger.info(f"Loading model from local cache: {model_path}")
                         if is_quantized_4bit:
@@ -454,11 +477,27 @@ class BaseVibeVoiceNode:
                         )
                     else:
                         raise FileNotFoundError("Model not found locally")
-                except (FileNotFoundError, OSError) as e:
+                except (FileNotFoundError, OSError, Exception) as e:
+                    # Check if this is a 401 authorization error
+                    if "401" in str(e) or "Unauthorized" in str(e):
+                        logger.error(f"Authorization error accessing {model_path}")
+                        logger.error("Microsoft VibeVoice models may be private on HuggingFace.")
+                        logger.info("\nTo fix this issue, please manually download the model:")
+                        logger.info(f"1. Download the model files from an alternative source")
+                        logger.info(f"2. Place them in: {model_dir}/snapshots/[hash]/")
+                        logger.info(f"3. Ensure all files are present (config.json, pytorch_model.bin, etc.)")
+                        logger.info(f"4. Restart ComfyUI and try again")
+                        raise Exception(
+                            f"Authorization error: Cannot access {model_path} on HuggingFace.\n"
+                            f"The model appears to be private or restricted.\n"
+                            f"Please manually download and place the model files in:\n"
+                            f"{model_dir}"
+                        )
+
                     logger.info(f"Downloading {model_path}...")
                     if is_quantized_4bit:
                         logger.info(f"Downloading 4-bit quantized model with subfolder: {model_kwargs.get('subfolder', 'None')}")
-                    
+
                     model_kwargs["local_files_only"] = False
                     self.model = VibeVoiceInferenceModel.from_pretrained(
                         model_path,
@@ -487,10 +526,17 @@ class BaseVibeVoiceNode:
                 
                 try:
                     # First try with local files if model was loaded locally
-                    if model_exists_in_comfyui:
+                    if model_exists_in_comfyui and snapshot_dir:
+                        # Use direct local path to avoid HuggingFace API calls
                         processor_kwargs["local_files_only"] = True
                         self.processor = VibeVoiceProcessor.from_pretrained(
-                            model_path, 
+                            snapshot_dir,
+                            **processor_kwargs
+                        )
+                    elif model_exists_in_comfyui:
+                        processor_kwargs["local_files_only"] = True
+                        self.processor = VibeVoiceProcessor.from_pretrained(
+                            model_path,
                             **processor_kwargs
                         )
                     else:
