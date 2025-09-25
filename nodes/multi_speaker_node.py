@@ -49,12 +49,18 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 "use_sampling": ("BOOLEAN", {"default": False, "tooltip": "Enable sampling mode. When False (default), uses deterministic generation like official examples"}),
             },
             "optional": {
+                "lora_path": ("STRING", {"default": "", "tooltip": "Absolute path to a LoRA folder containing adapter_config.json, adapter_model.safetensors, and optional diffusion_head/config.json + model.safetensors. Applied on top of the selected base model."}),
                 "speaker1_voice": ("AUDIO", {"tooltip": "Optional: Voice sample for Speaker 1. If not provided, synthetic voice will be used."}),
                 "speaker2_voice": ("AUDIO", {"tooltip": "Optional: Voice sample for Speaker 2. If not provided, synthetic voice will be used."}),
                 "speaker3_voice": ("AUDIO", {"tooltip": "Optional: Voice sample for Speaker 3. If not provided, synthetic voice will be used."}),
                 "speaker4_voice": ("AUDIO", {"tooltip": "Optional: Voice sample for Speaker 4. If not provided, synthetic voice will be used."}),
                 "temperature": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 2.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
+                "use_llm_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply LLM (language model) LoRA component when a LoRA path is provided."}),
+                "llm_lora_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05, "tooltip": "Strength of the LLM LoRA adapter. Only used if a LoRA path is provided and the LLM LoRA is enabled."}),
+                "use_diffusion_head_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply diffusion head LoRA / replacement when a LoRA path is provided."}),
+                "use_acoustic_connector_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply acoustic connector LoRA component when available in the LoRA folder."}),
+                "use_semantic_connector_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply semantic connector LoRA component when available in the LoRA folder."}),
             }
         }
 
@@ -73,6 +79,12 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                        diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
                        use_sampling: bool = False, speaker1_voice=None, speaker2_voice=None, 
                        speaker3_voice=None, speaker4_voice=None,
+                       lora_path: str = "",
+                       use_llm_lora: bool = True,
+                       llm_lora_strength: float = 1.0,
+                       use_diffusion_head_lora: bool = True,
+                       use_acoustic_connector_lora: bool = True,
+                       use_semantic_connector_lora: bool = True,
                        temperature: float = 0.95, top_p: float = 0.95):
         """Generate multi-speaker speech from text using VibeVoice"""
         
@@ -189,7 +201,15 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
             # Get model mapping and load model with attention type
             model_mapping = self._get_model_mapping()
             model_path = model_mapping.get(model, model)
-            self.load_model(model, model_path, attention_type)
+
+            lora_path_final = lora_path if isinstance(lora_path, str) and lora_path.strip() else None
+            # Store LoRA component usage preferences on the instance so the base loader can inspect them.
+            self.use_llm_lora = use_llm_lora
+            self.use_diffusion_head_lora = use_diffusion_head_lora
+            self.use_acoustic_connector_lora = use_acoustic_connector_lora
+            self.use_semantic_connector_lora = use_semantic_connector_lora
+
+            self.load_model(model, model_path, attention_type, lora_path=lora_path_final)
             
             voice_inputs = [speaker1_voice, speaker2_voice, speaker3_voice, speaker4_voice]
             
@@ -273,7 +293,8 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                         # Generate audio for this speaker's text
                         segment_audio = self._generate_with_vibevoice(
                             formatted_text, speaker_voice_samples, cfg_scale, seed,
-                            diffusion_steps, use_sampling, temperature, top_p
+                            diffusion_steps, use_sampling, temperature, top_p,
+                            llm_lora_strength=llm_lora_strength
                         )
                         
                         all_audio_segments.append(segment_audio)
@@ -312,7 +333,7 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 logger.info("Processing without pause support (no pause keywords found)")
                 audio_dict = self._generate_with_vibevoice(
                     converted_text, voice_samples, cfg_scale, seed, diffusion_steps,
-                    use_sampling, temperature, top_p
+                    use_sampling, temperature, top_p, llm_lora_strength=llm_lora_strength
                 )
             
             # Free memory if requested
@@ -339,4 +360,11 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                    speaker3_voice=None, speaker4_voice=None, **kwargs):
         """Cache key for ComfyUI"""
         voices_hash = hash(str([speaker1_voice, speaker2_voice, speaker3_voice, speaker4_voice]))
-        return f"{hash(text)}_{model}_{voices_hash}_{kwargs.get('cfg_scale', 1.3)}_{kwargs.get('seed', 0)}"
+        lora_path = kwargs.get('lora_path', '') or ''
+        use_llm = kwargs.get('use_llm_lora', True)
+        llm_lora_strength = kwargs.get('llm_lora_strength', 1.0)
+        use_diff = kwargs.get('use_diffusion_head_lora', True)
+        use_acoustic = kwargs.get('use_acoustic_connector_lora', True)
+        use_semantic = kwargs.get('use_semantic_connector_lora', True)
+        lora_settings_hash = f"{hash(lora_path)}_{int(use_llm)}_{llm_lora_strength}_{int(use_diff)}_{int(use_acoustic)}_{int(use_semantic)}"
+        return f"{hash(text)}_{model}_{voices_hash}_{lora_settings_hash}_{kwargs.get('cfg_scale', 1.3)}_{kwargs.get('seed', 0)}"
