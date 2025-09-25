@@ -1,5 +1,5 @@
 # Created by Fabio Sarracino
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 __author__ = "Fabio Sarracino"
 __title__ = "VibeVoice ComfyUI"
 
@@ -92,18 +92,23 @@ if check_embedded_vibevoice() and ensure_dependencies():
         from .nodes.single_speaker_node import VibeVoiceSingleSpeakerNode
         from .nodes.multi_speaker_node import VibeVoiceMultipleSpeakersNode
         from .nodes.free_memory_node import VibeVoiceFreeMemoryNode
-        
+        from .nodes.lora_node import VibeVoiceLoRANode
+
         # Single speaker node
         NODE_CLASS_MAPPINGS["VibeVoiceSingleSpeakerNode"] = VibeVoiceSingleSpeakerNode
         NODE_DISPLAY_NAME_MAPPINGS["VibeVoiceSingleSpeakerNode"] = "VibeVoice Single Speaker"
-        
+
         # Multi speaker node
         NODE_CLASS_MAPPINGS["VibeVoiceMultipleSpeakersNode"] = VibeVoiceMultipleSpeakersNode
         NODE_DISPLAY_NAME_MAPPINGS["VibeVoiceMultipleSpeakersNode"] = "VibeVoice Multiple Speakers"
-        
+
         # Free memory node
         NODE_CLASS_MAPPINGS["VibeVoiceFreeMemoryNode"] = VibeVoiceFreeMemoryNode
         NODE_DISPLAY_NAME_MAPPINGS["VibeVoiceFreeMemoryNode"] = "VibeVoice Free Memory"
+
+        # LoRA configuration node
+        NODE_CLASS_MAPPINGS["VibeVoiceLoRANode"] = VibeVoiceLoRANode
+        NODE_DISPLAY_NAME_MAPPINGS["VibeVoiceLoRANode"] = "VibeVoice LoRA"
         
         logger.info("VibeVoice nodes registered successfully")
         

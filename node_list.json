@@ -2,5 +2,6 @@
   "VibeVoice Load Text From File": "Load .txt from ComfyUI input/output/temp",
   "VibeVoice Single Speaker": "Single-speaker TTS with optional voice cloning",
   "VibeVoice Multiple Speakers": "Multi-speaker TTS ([1]..[4]) with optional clones",
-  "VibeVoice Free Memory": "Frees loaded VibeVoice models; passthrough audio"
+  "VibeVoice Free Memory": "Frees loaded VibeVoice models; passthrough audio",
+  "VibeVoice LoRA": "Configure LoRA adapters for fine-tuned VibeVoice models"
 }

@@ -9,18 +9,9 @@ import numpy as np
 import re
 import gc
 from typing import List, Optional, Tuple, Any
-import hashlib
 
 # Setup logging
 logger = logging.getLogger("VibeVoice")
-
-try:
-    from peft import PeftModel
-    from peft.tuners.lora import LoraLayer
-except ImportError:
-    logger.debug("PEFT library not found. LLM LoRA loading will be disabled.")
-    PeftModel = None
-    LoraLayer = None
 
 # Import for interruption support
 try:
@@ -63,12 +54,11 @@ class BaseVibeVoiceNode:
         self.current_model_path = None
         self.current_attention_type = None
         self.current_lora_path = None
-        # Per-component LoRA usage flags (overridable by node instances before load_model call)
+        # LoRA component flags (overridable by node instances)
         self.use_llm_lora = True
         self.use_diffusion_head_lora = True
         self.use_acoustic_connector_lora = True
         self.use_semantic_connector_lora = True
-        self.applied_lora_components = {}
     
     def free_memory(self):
         """Free model and processor from memory"""
@@ -132,28 +122,92 @@ class BaseVibeVoiceNode:
                 "VibeVoice embedded module import failed. Please ensure the vvembed folder exists "
                 "and transformers>=4.51.3 is installed."
             )
-        
-    def _set_lora_strength(self, strength: float):
-        """Dynamically sets the scaling factor for all LoRA layers in the language model."""
-        if self.model is None or LoraLayer is None or PeftModel is None:
-            return
-
-        language_model = getattr(self.model.model, 'language_model', None)
-        if not isinstance(language_model, PeftModel):
-            # If no LoRA is loaded, there's nothing to do.
-            return
-
-        logger.info(f"[LoRA] Setting LLM adapter strength to: {strength}")
-        try:
-            # Iterate through all modules of the wrapped language model
-            for module in language_model.modules():
-                if isinstance(module, LoraLayer):
-                    # The 'default' adapter is what PEFT loads from a directory.
-                    if 'default' in module.scaling:
-                        module.scaling['default'] = strength
-        except Exception as e:
-            logger.warning(f"[LoRA] Failed to set LoRA strength: {e}")
     
+    def _apply_lora(self, lora_path: str):
+        """Apply LoRA adapters to the model"""
+        try:
+            # Check component flags
+            use_llm = getattr(self, 'use_llm_lora', True)
+            use_diffusion = getattr(self, 'use_diffusion_head_lora', True)
+            use_acoustic = getattr(self, 'use_acoustic_connector_lora', True)
+            use_semantic = getattr(self, 'use_semantic_connector_lora', True)
+
+            if not any([use_llm, use_diffusion, use_acoustic, use_semantic]):
+                logger.info("All LoRA components disabled, skipping LoRA application")
+                return
+
+            # Apply LLM LoRA adapter if requested
+            if use_llm:
+                try:
+                    from peft import PeftModel
+                    base_lm = getattr(self.model.model, 'language_model', None)
+                    if base_lm is not None:
+                        logger.info(f"Applying LLM LoRA adapter from: {lora_path}")
+                        lora_wrapped = PeftModel.from_pretrained(base_lm, lora_path, is_trainable=False)
+                        device = next(self.model.parameters()).device
+                        dtype = next(self.model.parameters()).dtype
+                        lora_wrapped = lora_wrapped.to(device=device, dtype=dtype)
+                        self.model.model.language_model = lora_wrapped
+                        logger.info("LLM LoRA adapter successfully applied")
+                except ImportError:
+                    logger.warning("PEFT library not available for LLM LoRA")
+                except Exception as e:
+                    logger.warning(f"Failed to apply LLM LoRA: {e}")
+
+            # Helper function to load state dict into module
+            def _load_state_dict_into(module, folder):
+                if module is None or not os.path.isdir(folder):
+                    return False
+                try:
+                    # Try safetensors first
+                    safetensor_path = os.path.join(folder, "model.safetensors")
+                    if os.path.exists(safetensor_path):
+                        try:
+                            import safetensors.torch as st
+                            state_dict = st.load_file(safetensor_path)
+                            module.load_state_dict(state_dict)
+                            return True
+                        except:
+                            pass
+
+                    # Fallback to PyTorch format
+                    pytorch_path = os.path.join(folder, "pytorch_model.bin")
+                    if os.path.exists(pytorch_path):
+                        state_dict = torch.load(pytorch_path, map_location="cpu")
+                        module.load_state_dict(state_dict)
+                        return True
+                except Exception as e:
+                    logger.warning(f"Failed to load state dict from {folder}: {e}")
+                return False
+
+            # Load diffusion head if requested
+            if use_diffusion:
+                diffusion_path = os.path.join(lora_path, "diffusion_head")
+                if os.path.exists(diffusion_path):
+                    module = getattr(self.model.model, 'prediction_head', None)
+                    if module and _load_state_dict_into(module, diffusion_path):
+                        logger.info("Diffusion head LoRA loaded")
+
+            # Load acoustic connector if requested
+            if use_acoustic:
+                acoustic_path = os.path.join(lora_path, "acoustic_connector")
+                if os.path.exists(acoustic_path):
+                    module = getattr(self.model.model, 'acoustic_connector', None)
+                    if module and _load_state_dict_into(module, acoustic_path):
+                        logger.info("Acoustic connector LoRA loaded")
+
+            # Load semantic connector if requested
+            if use_semantic:
+                semantic_path = os.path.join(lora_path, "semantic_connector")
+                if os.path.exists(semantic_path):
+                    module = getattr(self.model.model, 'semantic_connector', None)
+                    if module and _load_state_dict_into(module, semantic_path):
+                        logger.info("Semantic connector LoRA loaded")
+
+        except Exception as e:
+            logger.error(f"Error applying LoRA: {e}")
+            # Don't fail the entire load, just log the error
+
     def _apply_sage_attention(self):
         """Apply SageAttention to the loaded model by monkey-patching attention layers"""
         try:
@@ -270,27 +324,28 @@ class BaseVibeVoiceNode:
             logger.error(f"Failed to apply SageAttention: {e}")
             logger.warning("Continuing with standard attention implementation")
     
-    def load_model(self, model_name: str, model_path: str, attention_type: str = "auto", lora_path: Optional[str] = None):
-        """Load VibeVoice model with specified attention implementation
-        
+    def load_model(self, model_name: str, model_path: str, attention_type: str = "auto", lora_path: str = None):
+        """Load VibeVoice model with specified attention implementation and optional LoRA
+
         Args:
             model_name: The display name of the model (e.g., "VibeVoice-Large-Quant-4Bit")
             model_path: The HuggingFace model path
             attention_type: The attention implementation to use
-            lora_path: Optional path to a LoRA adapter.
+            lora_path: Optional path to LoRA adapter directory
         """
-        # Check if we need to reload model due to attention type change
+        # Check if we need to reload model due to attention type or LoRA change
         current_attention = getattr(self, 'current_attention_type', None)
-        lora_changed = (getattr(self, 'current_lora_path', None) or "") != (lora_path or "")
-        
-        if (self.model is None or 
+        current_lora = getattr(self, 'current_lora_path', None)
+        lora_changed = (current_lora or "") != (lora_path or "")
+
+        if (self.model is None or
             getattr(self, 'current_model_path', None) != model_path or
             current_attention != attention_type or
             lora_changed):
             
-            # Free existing model before loading new one (important for attention type changes)
+            # Free existing model before loading new one (important for attention type or LoRA changes)
             if self.model is not None and (current_attention != attention_type or getattr(self, 'current_model_path', None) != model_path or lora_changed):
-                logger.info(f"Freeing existing model before loading with new settings (attention: {current_attention} -> {attention_type})")
+                logger.info(f"Freeing existing model before loading with new settings (attention: {current_attention} -> {attention_type}, LoRA: {current_lora} -> {lora_path})")
                 self.free_memory()
             
             try:
@@ -504,135 +559,16 @@ class BaseVibeVoiceNode:
                         self.model = self.model.to("mps")
                 else:
                     logger.info("Quantized model already mapped to device via device_map")
-
-                # If a LoRA path is provided, apply it on top of the base model (respect component toggles)
-                if lora_path and isinstance(lora_path, str) and os.path.isdir(lora_path):
-                    use_llm = getattr(self, 'use_llm_lora', True)
-                    use_diffusion = getattr(self, 'use_diffusion_head_lora', True)
-                    use_acoustic = getattr(self, 'use_acoustic_connector_lora', True)
-                    use_semantic = getattr(self, 'use_semantic_connector_lora', True)
-
-                    if not any([use_llm, use_diffusion, use_acoustic, use_semantic]):
-                        logger.info("All LoRA component toggles disabled; skipping LoRA application")
-                    else:
-                        try:
-                            from peft import PeftModel
-                        except Exception as e:
-                            logger.warning(f"PEFT not available to load LoRA adapters: {e}")
-                            PeftModel = None
-
-                    # Compute module checksums BEFORE loading optional weights
-                    def _module_sha1(module: torch.nn.Module) -> Optional[str]:
-                        if module is None:
-                            return None
-                        try:
-                            h = hashlib.sha1()
-                            with torch.no_grad():
-                                for p in module.parameters():
-                                    if p is None:
-                                        continue
-                                    t = p.detach().float().cpu().contiguous()
-                                    h.update(t.numpy().tobytes())
-                            return h.hexdigest()
-                        except Exception as e:
-                            logger.warning(f"Failed to compute checksum for {module.__class__.__name__}: {e}")
-                            return None
-
-                    ph_before = _module_sha1(getattr(self.model.model, 'prediction_head', None)) if use_diffusion else None
-                    ac_before = _module_sha1(getattr(self.model.model, 'acoustic_connector', None)) if use_acoustic else None
-                    se_before = _module_sha1(getattr(self.model.model, 'semantic_connector', None)) if use_semantic else None
-
-                    try:
-                        self.applied_lora_components = {}
-                        # Apply LoRA adapter to language model if requested and possible
-                        if use_llm:
-                            if PeftModel is not None:
-                                base_lm = getattr(self.model.model, 'language_model', None)
-                                if base_lm is not None:
-                                    logger.info(f"[LoRA] Applying LLM adapter from: {lora_path}")
-                                    try:
-                                        lora_wrapped = PeftModel.from_pretrained(base_lm, lora_path, is_trainable=False)
-                                        device = next(self.model.parameters()).device
-                                        dtype = next(self.model.parameters()).dtype
-                                        lora_wrapped = lora_wrapped.to(device=device, dtype=dtype)
-                                        self.model.model.language_model = lora_wrapped
-                                        logger.info("[LoRA] LLM adapter loaded")
-                                        self.applied_lora_components["llm"] = True
-                                    except Exception as lm_e:
-                                        logger.warning(f"[LoRA] Failed to apply LLM adapter: {lm_e}")
-                                else:
-                                    logger.info("[LoRA] Skipping LLM adapter: language_model not present on model")
-                            else:
-                                logger.info("[LoRA] Skipping LLM adapter: PEFT not available")
-                        else:
-                            logger.info("[LoRA] LLM adapter disabled by user toggle")
-
-                        # Load full-weight finetuned modules (diffusion head and connectors)
-                        try:
-                            import safetensors.torch as st
-                        except Exception:
-                            st = None
-
-                        def _load_state_dict_into(module, folder):
-                            if module is None or not isinstance(folder, str):
-                                return False
-                            # Try safetensors first
-                            p = os.path.join(folder, 'model.safetensors')
-                            if st is not None and os.path.exists(p):
-                                try:
-                                    sd = st.load_file(p)
-                                    module.load_state_dict(sd, strict=False)
-                                    return True
-                                except Exception as e:
-                                    logger.warning(f"Failed loading safetensors from {p}: {e}")
-                            # HF PyTorch format fallback
-                            p = os.path.join(folder, 'pytorch_model.bin')
-                            if os.path.exists(p):
-                                try:
-                                    sd = torch.load(p, map_location='cpu')
-                                    module.load_state_dict(sd, strict=False)
-                                    return True
-                                except Exception as e:
-                                    logger.warning(f"Failed loading PyTorch weights from {p}: {e}")
-                            return False
-
-                        # 1) diffusion head
-                        diff_head_dir = os.path.join(lora_path, 'diffusion_head')
-                        if use_diffusion and os.path.isdir(diff_head_dir):
-                            ok = _load_state_dict_into(getattr(self.model.model, 'prediction_head', None), diff_head_dir)
-                            if ok: self.applied_lora_components["diffusion_head"] = True
-                        
-                        # 2) connectors
-                        if use_acoustic and os.path.isdir(os.path.join(lora_path, 'acoustic_connector')):
-                            ok = _load_state_dict_into(getattr(self.model.model, 'acoustic_connector', None), os.path.join(lora_path, 'acoustic_connector'))
-                            if ok: self.applied_lora_components["acoustic_connector"] = True
-                        
-                        if use_semantic and os.path.isdir(os.path.join(lora_path, 'semantic_connector')):
-                            ok = _load_state_dict_into(getattr(self.model.model, 'semantic_connector', None), os.path.join(lora_path, 'semantic_connector'))
-                            if ok: self.applied_lora_components["semantic_connector"] = True
-
-                        # Compute checksums AFTER loading and compare
-                        ph_after = _module_sha1(getattr(self.model.model, 'prediction_head', None)) if use_diffusion else None
-                        if use_diffusion and ph_before == ph_after and "diffusion_head" in self.applied_lora_components:
-                            logger.warning("[LoRA] prediction_head checksum unchanged; custom weights may not have been applied.")
-                        
-                        ac_after = _module_sha1(getattr(self.model.model, 'acoustic_connector', None)) if use_acoustic else None
-                        if use_acoustic and ac_before == ac_after and "acoustic_connector" in self.applied_lora_components:
-                            logger.warning("[LoRA] acoustic_connector checksum unchanged; custom weights may not have been applied.")
-
-                        se_after = _module_sha1(getattr(self.model.model, 'semantic_connector', None)) if use_semantic else None
-                        if use_semantic and se_before == se_after and "semantic_connector" in self.applied_lora_components:
-                            logger.warning("[LoRA] semantic_connector checksum unchanged; custom weights may not have been applied.")
-                            
-                    except Exception as lora_e:
-                        logger.warning(f"[LoRA] Application encountered an error: {lora_e}")
-                        self.applied_lora_components["error"] = str(lora_e)
                 
                 # Apply SageAttention if requested and available
                 if use_sage_attention and SAGE_AVAILABLE:
                     self._apply_sage_attention()
                     logger.info("SageAttention successfully applied to model")
-                    
+
+                # Apply LoRA if provided and path exists
+                if lora_path and os.path.isdir(lora_path):
+                    self._apply_lora(lora_path)
+
                 self.current_model_path = model_path
                 self.current_attention_type = attention_type
                 self.current_lora_path = lora_path
@@ -640,46 +576,46 @@ class BaseVibeVoiceNode:
             except Exception as e:
                 logger.error(f"Failed to load VibeVoice model: {str(e)}")
                 raise Exception(f"Model loading failed: {str(e)}")
-
+    
     def _create_synthetic_voice_sample(self, speaker_idx: int) -> np.ndarray:
-            """Create synthetic voice sample for a specific speaker"""
-            sample_rate = 24000
-            duration = 1.0
-            samples = int(sample_rate * duration)
+        """Create synthetic voice sample for a specific speaker"""
+        sample_rate = 24000
+        duration = 1.0
+        samples = int(sample_rate * duration)
+        
+        t = np.linspace(0, duration, samples, False)
+        
+        # Create realistic voice-like characteristics for each speaker
+        # Use different base frequencies for different speaker types
+        base_frequencies = [120, 180, 140, 200]  # Mix of male/female-like frequencies
+        base_freq = base_frequencies[speaker_idx % len(base_frequencies)]
+        
+        # Create vowel-like formants (like "ah" sound) - unique per speaker
+        formant1 = 800 + speaker_idx * 100  # First formant
+        formant2 = 1200 + speaker_idx * 150  # Second formant
+        
+        # Generate more voice-like waveform
+        voice_sample = (
+            # Fundamental with harmonics (voice-like)
+            0.6 * np.sin(2 * np.pi * base_freq * t) +
+            0.25 * np.sin(2 * np.pi * base_freq * 2 * t) +
+            0.15 * np.sin(2 * np.pi * base_freq * 3 * t) +
             
-            t = np.linspace(0, duration, samples, False)
+            # Formant resonances (vowel-like characteristics)
+            0.1 * np.sin(2 * np.pi * formant1 * t) * np.exp(-t * 2) +
+            0.05 * np.sin(2 * np.pi * formant2 * t) * np.exp(-t * 3) +
             
-            # Create realistic voice-like characteristics for each speaker
-            # Use different base frequencies for different speaker types
-            base_frequencies = [120, 180, 140, 200]  # Mix of male/female-like frequencies
-            base_freq = base_frequencies[speaker_idx % len(base_frequencies)]
-            
-            # Create vowel-like formants (like "ah" sound) - unique per speaker
-            formant1 = 800 + speaker_idx * 100  # First formant
-            formant2 = 1200 + speaker_idx * 150  # Second formant
-            
-            # Generate more voice-like waveform
-            voice_sample = (
-                # Fundamental with harmonics (voice-like)
-                0.6 * np.sin(2 * np.pi * base_freq * t) +
-                0.25 * np.sin(2 * np.pi * base_freq * 2 * t) +
-                0.15 * np.sin(2 * np.pi * base_freq * 3 * t) +
-                
-                # Formant resonances (vowel-like characteristics)
-                0.1 * np.sin(2 * np.pi * formant1 * t) * np.exp(-t * 2) +
-                0.05 * np.sin(2 * np.pi * formant2 * t) * np.exp(-t * 3) +
-                
-                # Natural breath noise (reduced)
-                0.02 * np.random.normal(0, 1, len(t))
-            )
-            
-            # Add natural envelope (like human speech pattern)
-            # Quick attack, slower decay with slight vibrato (unique per speaker)
-            vibrato_freq = 4 + speaker_idx * 0.3  # Slightly different vibrato per speaker
-            envelope = (np.exp(-t * 0.3) * (1 + 0.1 * np.sin(2 * np.pi * vibrato_freq * t)))
-            voice_sample *= envelope * 0.08  # Lower volume
-            
-            return voice_sample.astype(np.float32)
+            # Natural breath noise (reduced)
+            0.02 * np.random.normal(0, 1, len(t))
+        )
+        
+        # Add natural envelope (like human speech pattern)
+        # Quick attack, slower decay with slight vibrato (unique per speaker)
+        vibrato_freq = 4 + speaker_idx * 0.3  # Slightly different vibrato per speaker
+        envelope = (np.exp(-t * 0.3) * (1 + 0.1 * np.sin(2 * np.pi * vibrato_freq * t)))
+        voice_sample *= envelope * 0.08  # Lower volume
+        
+        return voice_sample.astype(np.float32)
     
     def _prepare_audio_from_comfyui(self, voice_audio, target_sample_rate: int = 24000) -> Optional[np.ndarray]:
         """Prepare audio from ComfyUI format to numpy array"""
@@ -896,7 +832,7 @@ class BaseVibeVoiceNode:
                 # Plain text, assign to first speaker
                 return f"Speaker 1: {text}"
     
-    def _generate_with_vibevoice(self, formatted_text: str, voice_samples: List[np.ndarray], 
+    def _generate_with_vibevoice(self, formatted_text: str, voice_samples: List[np.ndarray],
                                 cfg_scale: float, seed: int, diffusion_steps: int, use_sampling: bool,
                                 temperature: float = 0.95, top_p: float = 0.95, llm_lora_strength: float = 1.0) -> dict:
         """Generate audio using VibeVoice model"""
@@ -904,8 +840,6 @@ class BaseVibeVoiceNode:
             # Ensure model and processor are loaded
             if self.model is None or self.processor is None:
                 raise Exception("Model or processor not loaded")
-            
-            self._set_lora_strength(llm_lora_strength)
             
             # Set seeds for reproducibility
             torch.manual_seed(seed)
@@ -1037,4 +971,3 @@ class BaseVibeVoiceNode:
             # For real errors, log and re-raise with context
             logger.error(f"VibeVoice generation failed: {e}")
             raise Exception(f"VibeVoice generation failed: {str(e)}")
-    

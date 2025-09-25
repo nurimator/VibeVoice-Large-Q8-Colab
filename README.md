@@ -8,6 +8,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 🎤 **Single Speaker TTS**: Generate natural speech with optional voice cloning
 - 👥 **Multi-Speaker Conversations**: Support for up to 4 distinct speakers
 - 🎯 **Voice Cloning**: Clone voices from audio samples
+- 🎨 **LoRA Support**: Fine-tune voices with custom LoRA adapters (v1.4.0+)
 - 📝 **Text File Loading**: Load scripts from text files
 - 📚 **Automatic Text Chunking**: Handles long texts seamlessly with configurable chunk size
 - ⏸️ **Custom Pause Tags**: Insert silences with `[pause]` and `[pause:ms]` tags (wrapper feature)
@@ -78,6 +79,7 @@ Generates speech from text using a single voice.
   - `use_sampling`: Enable/disable deterministic generation (default: False)
 - **Optional Parameters**:
   - `voice_to_clone`: Audio input for voice cloning
+  - `lora`: LoRA configuration from VibeVoice LoRA node
   - `temperature`: Sampling temperature (0.1-2.0, default: 0.95)
   - `top_p`: Nucleus sampling parameter (0.1-1.0, default: 0.95)
   - `max_words_per_chunk`: Maximum words per chunk for long texts (100-500, default: 250)
@@ -98,6 +100,7 @@ Generates multi-speaker conversations with distinct voices.
   - `use_sampling`: Enable/disable deterministic generation (default: False)
 - **Optional Parameters**:
   - `speaker1_voice` to `speaker4_voice`: Audio inputs for voice cloning
+  - `lora`: LoRA configuration from VibeVoice LoRA node
   - `temperature`: Sampling temperature (0.1-2.0, default: 0.95)
   - `top_p`: Nucleus sampling parameter (0.1-1.0, default: 0.95)
 
@@ -107,6 +110,20 @@ Manually frees all loaded VibeVoice models from memory.
 - **Output**: `audio` - Passes through the input audio unchanged
 - **Use Case**: Insert between nodes to free VRAM/RAM at specific workflow points
 - **Example**: `[VibeVoice Node] → [Free Memory] → [Save Audio]`
+
+### 5. VibeVoice LoRA
+Configure and load custom LoRA adapters for fine-tuned VibeVoice models.
+- **LoRA Selection**: Dropdown menu with available LoRA adapters
+- **LoRA Location**: Place your LoRA folders in `ComfyUI/models/vibevoice/loras/`
+- **Parameters**:
+  - `lora_name`: Select from available LoRA adapters or "None" to disable
+  - `llm_strength`: Strength of the language model LoRA (0.0-2.0, default: 1.0)
+  - `use_llm`: Apply language model LoRA component (default: True)
+  - `use_diffusion_head`: Apply diffusion head replacement (default: True)
+  - `use_acoustic_connector`: Apply acoustic connector LoRA (default: True)
+  - `use_semantic_connector`: Apply semantic connector LoRA (default: True)
+- **Output**: `lora` - LoRA configuration to connect to speaker nodes
+- **Usage**: `[VibeVoice LoRA] → [Single/Multiple Speaker Node]`
 
 ## Multi-Speaker Text Format
 
@@ -175,6 +192,80 @@ To clone a voice:
 - Minimum 3–10 seconds. Recommended at least 30 seconds for better quality
 - Automatically resampled to 24kHz
 
+## LoRA Support
+
+### Overview
+Starting from version 1.4.0, VibeVoice ComfyUI supports custom LoRA (Low-Rank Adaptation) adapters for fine-tuning voice characteristics. This allows you to train and use specialized voice models while maintaining the base VibeVoice capabilities.
+
+### Setting Up LoRA Adapters
+
+1. **LoRA Directory Structure**:
+   Place your LoRA adapter folders in: `ComfyUI/models/vibevoice/loras/`
+   ```
+   ComfyUI/
+   └── models/
+       └── vibevoice/
+           └── loras/
+               ├── my_custom_voice/
+               │   ├── adapter_config.json
+               │   ├── adapter_model.safetensors
+               │   └── diffusion_head/  (optional)
+               ├── character_voice/
+               └── style_adaptation/
+   ```
+
+2. **Required Files**:
+   - `adapter_config.json`: LoRA configuration
+   - `adapter_model.safetensors` or `adapter_model.bin`: Model weights
+   - Optional components:
+     - `diffusion_head/`: Custom diffusion head weights
+     - `acoustic_connector/`: Acoustic connector adaptation
+     - `semantic_connector/`: Semantic connector adaptation
+
+### Using LoRA in ComfyUI
+
+1. **Add VibeVoice LoRA Node**:
+   - Create a "VibeVoice LoRA" node in your workflow
+   - Select your LoRA from the dropdown menu
+   - Configure component settings and strength
+
+2. **Connect to Speaker Nodes**:
+   - Connect the LoRA node's output to the `lora` input of speaker nodes
+   - Both Single Speaker and Multiple Speakers nodes support LoRA
+
+3. **LoRA Parameters**:
+   - **llm_strength**: Controls the influence of the language model LoRA (0.0-2.0)
+   - **Component toggles**: Enable/disable specific LoRA components
+   - Select "None" to disable LoRA and use the base model
+
+### Training Your Own LoRA
+
+To create custom LoRA adapters for VibeVoice, use the official fine-tuning repository:
+- **Repository**: [VibeVoice Fine-tuning](https://github.com/voicepowered-ai/VibeVoice-finetuning)
+- **Features**:
+  - Parameter-efficient fine-tuning
+  - Support for custom datasets
+  - Adjustable LoRA rank and scaling
+  - Optional diffusion head adaptation
+
+### Best Practices
+
+- **Voice Consistency**: Use the same LoRA across all chunks for long texts
+- **Memory Management**: LoRA adds minimal memory overhead (~100-500MB)
+- **Compatibility**: LoRA adapters are compatible with all VibeVoice model variants
+- **Strength Tuning**: Start with default strength (1.0) and adjust based on results
+
+### Compatibility Note
+
+⚠️ **Transformers Version**: The LoRA implementation was developed and tested with `transformers==4.51.3`. While our wrapper supports `transformers>=4.51.3`, LoRA functionality with newer versions of transformers is not guaranteed. If you experience issues with LoRA loading, consider using `transformers==4.51.3` specifically:
+```bash
+pip install transformers==4.51.3
+```
+
+### Credits
+
+LoRA implementation by [@jpgallegoar](https://github.com/jpgallegoar) (PR #127)
+
 ## Pause Tags Support
 
 ### Overview
@@ -210,7 +301,7 @@ This means:
 - Text before a pause and text after a pause are processed separately
 - The model cannot see across pause boundaries when generating speech
 - This may affect prosody and intonation consistency
-- Use pauses sparingly for best results
+- This may affect prosody and intonation consistency
 
 ### How It Works
 1. The wrapper parses your text to find pause tags
@@ -354,6 +445,16 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## Changelog
+
+### Version 1.4.0
+- Added LoRA (Low-Rank Adaptation) support for fine-tuned models
+  - New "VibeVoice LoRA" node for configuring custom voice adaptations
+  - Support for language model, diffusion head, and connector adaptations
+  - Dropdown menu for easy LoRA selection from `ComfyUI/models/vibevoice/loras/`
+  - Adjustable LoRA strength and component toggles
+  - Compatible with both Single and Multiple Speaker nodes
+  - Minimal memory overhead (~100-500MB per LoRA)
+  - Credits: Implementation by [@jpgallegoar](https://github.com/jpgallegoar)
 
 ### Version 1.3.0
 - Added custom pause tag support for speech pacing control

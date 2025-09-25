@@ -43,19 +43,14 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                     "tooltip": "Attention implementation. Auto selects the best available, eager is standard, sdpa is optimized PyTorch, flash_attention_2 requires compatible GPU, sage uses quantized attention for speedup (CUDA only)"
                 }),
                 "free_memory_after_generate": ("BOOLEAN", {"default": True, "tooltip": "Free model from memory after generation to save VRAM/RAM. Disable to keep model loaded for faster subsequent generations"}),
-                "diffusion_steps": ("INT", {"default": 20, "min": 5, "max": 100, "step": 1, "tooltip": "Number of denoising steps. More steps = better quality but slower. Default: 20"}),
+                "diffusion_steps": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1, "tooltip": "Number of denoising steps. More steps = theoretically better quality but slower. Default: 20"}),
                 "seed": ("INT", {"default": 42, "min": 0, "max": 2**32-1, "tooltip": "Random seed for generation. Default 42 is used in official examples"}),
                 "cfg_scale": ("FLOAT", {"default": 1.3, "min": 0.5, "max": 3.5, "step": 0.05, "tooltip": "Classifier-free guidance scale (official default: 1.3)"}),
                 "use_sampling": ("BOOLEAN", {"default": False, "tooltip": "Enable sampling mode. When False (default), uses deterministic generation like official examples"}),
             },
             "optional": {
                 "voice_to_clone": ("AUDIO", {"tooltip": "Optional: Reference voice to clone. If not provided, synthetic voice will be used."}),
-                "lora_path": ("STRING", {"default": "", "tooltip": "Absolute path to a LoRA folder containing adapter_config.json, adapter_model.safetensors, and optional diffusion_head/config.json + model.safetensors. Applied on top of the selected base model."}),
-                "use_llm_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply LLM (language model) LoRA component when a LoRA path is provided."}),
-                "llm_lora_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05, "tooltip": "Strength of the LLM LoRA adapter. Only used if a LoRA path is provided and the LLM LoRA is enabled."}),
-                "use_diffusion_head_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply diffusion head LoRA / replacement when a LoRA path is provided."}),
-                "use_acoustic_connector_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply acoustic connector LoRA component when available in the LoRA folder."}),
-                "use_semantic_connector_lora": ("BOOLEAN", {"default": True, "tooltip": "Apply semantic connector LoRA component when available in the LoRA folder."}),
+                "lora": ("LORA_CONFIG", {"tooltip": "Optional: LoRA configuration from VibeVoice LoRA node"}),
                 "temperature": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 2.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "max_words_per_chunk": ("INT", {"default": 250, "min": 100, "max": 500, "step": 50, "tooltip": "Maximum words per chunk for long texts. Lower values prevent speed issues but create more chunks."}),
@@ -85,15 +80,12 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             
         return voice_samples
     
-    def generate_speech(self, text: str = "", model: str = "VibeVoice-1.5B", 
-                        attention_type: str = "auto", free_memory_after_generate: bool = True,
-                        diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
-                        use_sampling: bool = False, voice_to_clone=None,
-                        lora_path: str = "", use_llm_lora: bool = True, llm_lora_strength: float = 1.0,
-                        use_diffusion_head_lora: bool = True, use_acoustic_connector_lora: bool = True,
-                        use_semantic_connector_lora: bool = True,
-                        temperature: float = 0.95, top_p: float = 0.95,
-                        max_words_per_chunk: int = 250):
+    def generate_speech(self, text: str = "", model: str = "VibeVoice-1.5B",
+                       attention_type: str = "auto", free_memory_after_generate: bool = True,
+                       diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
+                       use_sampling: bool = False, voice_to_clone=None, lora=None,
+                       temperature: float = 0.95, top_p: float = 0.95,
+                       max_words_per_chunk: int = 250):
         """Generate speech from text using VibeVoice"""
         
         try:
@@ -103,18 +95,28 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             else:
                 raise Exception("No text provided. Please enter text or connect from LoadTextFromFile node.")
             
-            # Get model mapping and load model with attention type
+            # Get model mapping and prepare LoRA if provided
             model_mapping = self._get_model_mapping()
             model_path = model_mapping.get(model, model)
-            
-            lora_path_final = lora_path if isinstance(lora_path, str) and lora_path.strip() else None
 
-            # Store LoRA component usage preferences on the instance so the base loader can inspect them.
-            self.use_llm_lora = use_llm_lora
-            self.use_diffusion_head_lora = use_diffusion_head_lora
-            self.use_acoustic_connector_lora = use_acoustic_connector_lora
-            self.use_semantic_connector_lora = use_semantic_connector_lora
-            self.load_model(model, model_path, attention_type, lora_path=lora_path_final)
+            # Extract LoRA configuration if provided
+            lora_path = None
+            llm_lora_strength = 1.0
+            if lora and isinstance(lora, dict):
+                lora_path = lora.get("path", None)
+                llm_lora_strength = lora.get("llm_strength", 1.0)
+
+                # Set LoRA component flags based on configuration
+                self.use_llm_lora = lora.get("use_llm", True)
+                self.use_diffusion_head_lora = lora.get("use_diffusion_head", True)
+                self.use_acoustic_connector_lora = lora.get("use_acoustic_connector", True)
+                self.use_semantic_connector_lora = lora.get("use_semantic_connector", True)
+
+                if lora_path:
+                    logger.info(f"Using LoRA from: {lora_path}")
+
+            # Load model with optional LoRA
+            self.load_model(model, model_path, attention_type, lora_path=lora_path)
             
             # For single speaker, we just use ["Speaker 1"]
             speakers = ["Speaker 1"]
@@ -156,7 +158,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                             
                             # Generate audio for this chunk
                             chunk_audio = self._generate_with_vibevoice(
-                                formatted_text, voice_samples, cfg_scale, 
+                                formatted_text, voice_samples, cfg_scale,
                                 seed,  # Use same seed for voice consistency
                                 diffusion_steps, use_sampling, temperature, top_p,
                                 llm_lora_strength=llm_lora_strength
@@ -176,7 +178,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                         
                         # Generate audio
                         segment_audio = self._generate_with_vibevoice(
-                            formatted_text, voice_samples, cfg_scale, seed, diffusion_steps, 
+                            formatted_text, voice_samples, cfg_scale, seed, diffusion_steps,
                             use_sampling, temperature, top_p, llm_lora_strength=llm_lora_strength
                         )
                         
@@ -232,14 +234,8 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                 raise Exception(f"Error generating speech: {str(e)}")
 
     @classmethod
-    def IS_CHANGED(cls, text="", model="VibeVoice-1.5B", voice_to_clone=None, **kwargs):
+    def IS_CHANGED(cls, text="", model="VibeVoice-1.5B", voice_to_clone=None, lora=None, **kwargs):
         """Cache key for ComfyUI"""
         voice_hash = hash(str(voice_to_clone)) if voice_to_clone else 0
-        lora_path = kwargs.get('lora_path', '') or ''
-        use_llm = kwargs.get('use_llm_lora', True)
-        llm_lora_strength = kwargs.get('llm_lora_strength', 1.0)
-        use_diff = kwargs.get('use_diffusion_head_lora', True)
-        use_acoustic = kwargs.get('use_acoustic_connector_lora', True)
-        use_semantic = kwargs.get('use_semantic_connector_lora', True)
-        lora_settings_hash = f"{hash(lora_path)}_{int(use_llm)}_{llm_lora_strength}_{int(use_diff)}_{int(use_acoustic)}_{int(use_semantic)}"
-        return f"{hash(text)}_{model}_{voice_hash}_{lora_settings_hash}_{kwargs.get('cfg_scale', 1.3)}_{kwargs.get('seed', 0)}"
+        lora_hash = hash(str(lora)) if lora else 0
+        return f"{hash(text)}_{model}_{voice_hash}_{lora_hash}_{kwargs.get('cfg_scale', 1.3)}_{kwargs.get('seed', 0)}"
