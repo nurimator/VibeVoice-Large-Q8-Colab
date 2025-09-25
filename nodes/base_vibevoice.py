@@ -597,7 +597,7 @@ class BaseVibeVoiceNode:
                     del os.environ['HUGGINGFACE_HUB_CACHE']
                 
                 # Move to appropriate device (skip for quantized models as they use device_map)
-                if not is_quantized_4bit and not is_quantized_8bit:
+                if not is_quantized_4bit:
                     device = get_optimal_device()
                     if device == "cuda":
                         self.model = self.model.cuda()
