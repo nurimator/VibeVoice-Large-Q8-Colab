@@ -126,11 +126,15 @@ class BaseVibeVoiceNode:
     def _apply_lora(self, lora_path: str):
         """Apply LoRA adapters to the model"""
         try:
+            logger.info(f"Starting LoRA application from path: {lora_path}")
+
             # Check component flags
             use_llm = getattr(self, 'use_llm_lora', True)
             use_diffusion = getattr(self, 'use_diffusion_head_lora', True)
             use_acoustic = getattr(self, 'use_acoustic_connector_lora', True)
             use_semantic = getattr(self, 'use_semantic_connector_lora', True)
+
+            logger.info(f"LoRA component flags - LLM: {use_llm}, Diffusion: {use_diffusion}, Acoustic: {use_acoustic}, Semantic: {use_semantic}")
 
             if not any([use_llm, use_diffusion, use_acoustic, use_semantic]):
                 logger.info("All LoRA components disabled, skipping LoRA application")
@@ -138,55 +142,182 @@ class BaseVibeVoiceNode:
 
             # Apply LLM LoRA adapter if requested
             if use_llm:
-                try:
-                    from peft import PeftModel
-                    base_lm = getattr(self.model.model, 'language_model', None)
-                    if base_lm is not None:
-                        logger.info(f"Applying LLM LoRA adapter from: {lora_path}")
-                        lora_wrapped = PeftModel.from_pretrained(base_lm, lora_path, is_trainable=False)
-                        device = next(self.model.parameters()).device
-                        dtype = next(self.model.parameters()).dtype
-                        lora_wrapped = lora_wrapped.to(device=device, dtype=dtype)
-                        self.model.model.language_model = lora_wrapped
-                        logger.info("LLM LoRA adapter successfully applied")
-                except ImportError:
-                    logger.warning("PEFT library not available for LLM LoRA")
-                except Exception as e:
-                    logger.warning(f"Failed to apply LLM LoRA: {e}")
+                # Check if adapter files exist
+                adapter_model_path = os.path.join(lora_path, "adapter_model.safetensors")
+                adapter_bin_path = os.path.join(lora_path, "adapter_model.bin")
+                adapter_config = os.path.join(lora_path, "adapter_config.json")
+
+                has_adapter = os.path.exists(adapter_model_path) or os.path.exists(adapter_bin_path)
+
+                if has_adapter and os.path.exists(adapter_config):
+                    try:
+                        from peft import PeftModel
+                        base_lm = getattr(self.model.model, 'language_model', None)
+                        if base_lm is not None:
+                            logger.info(f"Applying LLM LoRA adapter from: {lora_path}")
+                            lora_wrapped = PeftModel.from_pretrained(base_lm, lora_path, is_trainable=False)
+                            device = next(self.model.parameters()).device
+                            dtype = next(self.model.parameters()).dtype
+                            lora_wrapped = lora_wrapped.to(device=device, dtype=dtype)
+                            self.model.model.language_model = lora_wrapped
+                            logger.info("LLM LoRA adapter successfully applied")
+                    except ImportError:
+                        logger.warning("PEFT library not available for LLM LoRA")
+                    except Exception as e:
+                        logger.warning(f"Failed to apply LLM LoRA: {e}")
+                else:
+                    logger.info(f"No LLM LoRA adapter files found in {lora_path}, skipping LLM LoRA")
 
             # Helper function to load state dict into module
             def _load_state_dict_into(module, folder):
-                if module is None or not os.path.isdir(folder):
+                if module is None:
+                    logger.warning(f"Module is None, cannot load state dict from {folder}")
                     return False
+                if not os.path.isdir(folder):
+                    logger.warning(f"Folder does not exist: {folder}")
+                    return False
+
                 try:
                     # Try safetensors first
                     safetensor_path = os.path.join(folder, "model.safetensors")
                     if os.path.exists(safetensor_path):
                         try:
                             import safetensors.torch as st
+                            logger.info(f"Loading safetensor from: {safetensor_path}")
                             state_dict = st.load_file(safetensor_path)
-                            module.load_state_dict(state_dict)
+                            logger.info(f"Loaded state dict with {len(state_dict)} keys")
+
+                            # Get device and dtype from module
+                            device = next(module.parameters()).device
+                            dtype = next(module.parameters()).dtype
+                            logger.info(f"Module device: {device}, dtype: {dtype}")
+
+                            # Convert state dict to correct device and dtype
+                            for key in state_dict:
+                                state_dict[key] = state_dict[key].to(device=device, dtype=dtype)
+
+                            # Load with strict=False to allow partial loading
+                            missing_keys, unexpected_keys = module.load_state_dict(state_dict, strict=False)
+
+                            if missing_keys:
+                                logger.warning(f"Missing keys when loading state dict ({len(missing_keys)} total): {missing_keys[:5]}..." if len(missing_keys) > 5 else f"Missing keys: {missing_keys}")
+                            if unexpected_keys:
+                                logger.warning(f"Unexpected keys when loading state dict ({len(unexpected_keys)} total): {unexpected_keys[:5]}..." if len(unexpected_keys) > 5 else f"Unexpected keys: {unexpected_keys}")
+
+                            # Log success even with missing keys if most were loaded
+                            total_keys = len(state_dict)
+                            if missing_keys:
+                                logger.info(f"Loaded {total_keys} keys from LoRA, {len(missing_keys)} keys not found in model")
+
+                            logger.info("Successfully loaded state dict into module")
                             return True
-                        except:
-                            pass
+                        except Exception as e:
+                            logger.warning(f"Failed to load safetensors: {e}")
+                            import traceback
+                            logger.debug(f"Traceback: {traceback.format_exc()}")
 
                     # Fallback to PyTorch format
                     pytorch_path = os.path.join(folder, "pytorch_model.bin")
                     if os.path.exists(pytorch_path):
+                        logger.info(f"Loading pytorch model from: {pytorch_path}")
                         state_dict = torch.load(pytorch_path, map_location="cpu")
-                        module.load_state_dict(state_dict)
+                        logger.info(f"Loaded state dict with {len(state_dict)} keys")
+
+                        # Get device and dtype from module
+                        device = next(module.parameters()).device
+                        dtype = next(module.parameters()).dtype
+
+                        # Convert state dict to correct device and dtype
+                        for key in state_dict:
+                            state_dict[key] = state_dict[key].to(device=device, dtype=dtype)
+
+                        missing_keys, unexpected_keys = module.load_state_dict(state_dict, strict=False)
+
+                        if missing_keys:
+                            logger.warning(f"Missing keys: {missing_keys[:5]}..." if len(missing_keys) > 5 else f"Missing keys: {missing_keys}")
+                        if unexpected_keys:
+                            logger.warning(f"Unexpected keys: {unexpected_keys[:5]}..." if len(unexpected_keys) > 5 else f"Unexpected keys: {unexpected_keys}")
+
+                        logger.info("Successfully loaded pytorch model into module")
                         return True
+                    else:
+                        logger.warning(f"No model file found in {folder}")
+                        logger.warning(f"Looked for: {safetensor_path} and {pytorch_path}")
+
                 except Exception as e:
-                    logger.warning(f"Failed to load state dict from {folder}: {e}")
+                    logger.error(f"Failed to load state dict from {folder}: {e}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
                 return False
 
             # Load diffusion head if requested
             if use_diffusion:
                 diffusion_path = os.path.join(lora_path, "diffusion_head")
                 if os.path.exists(diffusion_path):
+                    logger.info(f"Found diffusion_head directory at: {diffusion_path}")
+
+                    # The diffusion head is called 'prediction_head' in VibeVoice
                     module = getattr(self.model.model, 'prediction_head', None)
-                    if module and _load_state_dict_into(module, diffusion_path):
-                        logger.info("Diffusion head LoRA loaded")
+                    if module:
+                        logger.info("Found prediction_head module in model")
+
+                        # Check model compatibility by looking at dimensions
+                        skip_loading = False
+                        try:
+                            # Get hidden size from the module
+                            if hasattr(module, 'cond_proj') and hasattr(module.cond_proj, 'weight'):
+                                model_hidden_size = module.cond_proj.weight.shape[0]
+                                logger.info(f"Current model prediction_head hidden size: {model_hidden_size}")
+
+                                # Check LoRA dimensions
+                                safetensor_path = os.path.join(diffusion_path, "model.safetensors")
+                                if os.path.exists(safetensor_path):
+                                    import safetensors.torch as st
+                                    lora_state = st.load_file(safetensor_path)
+                                    if 'cond_proj.weight' in lora_state:
+                                        lora_hidden_size = lora_state['cond_proj.weight'].shape[0]
+                                        logger.info(f"LoRA diffusion head hidden size: {lora_hidden_size}")
+
+                                        if model_hidden_size != lora_hidden_size:
+                                            skip_loading = True
+                                            if lora_hidden_size == 3584:
+                                                logger.error("="*60)
+                                                logger.error("LoRA MODEL MISMATCH!")
+                                                logger.error(f"This LoRA was trained on VibeVoice-Large (hidden_size=3584)")
+                                                if model_hidden_size == 1536:
+                                                    logger.error(f"You are using VibeVoice-1.5B (hidden_size=1536)")
+                                                    logger.error("Please switch to 'VibeVoice-Large' model to use this LoRA")
+                                                else:
+                                                    logger.error(f"Your model has hidden_size={model_hidden_size}")
+                                                    logger.error("Please use VibeVoice-Large (non-quantized) model")
+                                                logger.error("="*60)
+                                                logger.error("Skipping LoRA loading due to incompatible model")
+                                            elif lora_hidden_size == 1536:
+                                                logger.error("="*60)
+                                                logger.error("LoRA MODEL MISMATCH!")
+                                                logger.error(f"This LoRA was trained on VibeVoice-1.5B (hidden_size=1536)")
+                                                logger.error(f"You are using a model with hidden_size={model_hidden_size}")
+                                                logger.error("Please switch to 'VibeVoice-1.5B' model to use this LoRA")
+                                                logger.error("="*60)
+                                                logger.error("Skipping LoRA loading due to incompatible model")
+                        except Exception as e:
+                            logger.debug(f"Could not check model compatibility: {e}")
+
+                        # Only attempt to load if compatible
+                        if not skip_loading:
+                            if _load_state_dict_into(module, diffusion_path):
+                                logger.info("Diffusion head LoRA loaded successfully into prediction_head")
+                            else:
+                                logger.warning("Failed to load diffusion head LoRA")
+                        else:
+                            logger.info("Diffusion head LoRA loading skipped due to model mismatch")
+                    else:
+                        logger.warning("Model does not have prediction_head attribute")
+                        # Debug: list available attributes
+                        attrs = [a for a in dir(self.model.model) if not a.startswith('_')]
+                        logger.debug(f"Available model.model attributes: {attrs[:15]}...")
+                else:
+                    logger.info(f"No diffusion_head directory found at: {diffusion_path}")
 
             # Load acoustic connector if requested
             if use_acoustic:
@@ -204,8 +335,14 @@ class BaseVibeVoiceNode:
                     if module and _load_state_dict_into(module, semantic_path):
                         logger.info("Semantic connector LoRA loaded")
 
+
+            # Log summary of what was loaded
+            logger.info("LoRA application completed")
+
         except Exception as e:
             logger.error(f"Error applying LoRA: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             # Don't fail the entire load, just log the error
 
     def _apply_sage_attention(self):

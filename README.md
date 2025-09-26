@@ -446,6 +446,14 @@ Contributions welcome! Please:
 
 ## Changelog
 
+### Version 1.4.3
+- Improved LoRA system with better logging and compatibility checks
+  - Added model compatibility detection to prevent mismatched LoRA loading
+  - Enhanced debug logging for LoRA component loading process
+  - Automatic detection and clear error messages for incompatible model-LoRA combinations
+  - Prevents loading errors when using quantized models with standard LoRAs
+  - Minor optimizations to LoRA weight loading process
+
 ### Version 1.4.2
 - Bug Fixing
 
