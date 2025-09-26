@@ -56,6 +56,13 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 "lora": ("LORA_CONFIG", {"tooltip": "Optional: LoRA configuration from VibeVoice LoRA node"}),
                 "temperature": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 2.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
+                "voice_speed_factor": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.8,
+                    "max": 1.2,
+                    "step": 0.01,
+                    "tooltip": "1.0 = normal speed, <1.0 = slower speed, >1.0 = faster speed (applies to all speakers)"
+                }),
             }
         }
 
@@ -65,9 +72,9 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
     CATEGORY = "VibeVoiceWrapper"
     DESCRIPTION = "Generate multi-speaker conversations with up to 4 distinct voices using Microsoft VibeVoice"
 
-    def _prepare_voice_sample(self, voice_audio, speaker_idx: int) -> Optional[np.ndarray]:
-        """Prepare a single voice sample from input audio"""
-        return self._prepare_audio_from_comfyui(voice_audio)
+    def _prepare_voice_sample(self, voice_audio, speaker_idx: int, voice_speed_factor: float = 1.0) -> Optional[np.ndarray]:
+        """Prepare a single voice sample from input audio with speed adjustment"""
+        return self._prepare_audio_from_comfyui(voice_audio, speed_factor=voice_speed_factor)
     
     def generate_speech(self, text: str = "", model: str = "VibeVoice-7B-Preview",
                        attention_type: str = "auto", free_memory_after_generate: bool = True,
@@ -75,7 +82,8 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                        use_sampling: bool = False, lora=None,
                        speaker1_voice=None, speaker2_voice=None,
                        speaker3_voice=None, speaker4_voice=None,
-                       temperature: float = 0.95, top_p: float = 0.95):
+                       temperature: float = 0.95, top_p: float = 0.95,
+                       voice_speed_factor: float = 1.0):
         """Generate multi-speaker speech from text using VibeVoice"""
         
         try:
@@ -220,7 +228,7 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                 
                 # Try to use provided voice sample
                 if idx < len(voice_inputs) and voice_inputs[idx] is not None:
-                    voice_sample = self._prepare_voice_sample(voice_inputs[idx], idx)
+                    voice_sample = self._prepare_voice_sample(voice_inputs[idx], idx, voice_speed_factor)
                     if voice_sample is None:
                         # Use the actual speaker index for consistent synthetic voice
                         voice_sample = self._create_synthetic_voice_sample(idx)

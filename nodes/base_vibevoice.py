@@ -799,8 +799,38 @@ class BaseVibeVoiceNode:
         voice_sample *= envelope * 0.08  # Lower volume
         
         return voice_sample.astype(np.float32)
-    
-    def _prepare_audio_from_comfyui(self, voice_audio, target_sample_rate: int = 24000) -> Optional[np.ndarray]:
+
+    def _adjust_voice_speed(self, audio_np: np.ndarray, speed_factor: float, sample_rate: int = 24000) -> np.ndarray:
+        """Adjust voice speed using time-stretching without changing pitch significantly
+
+        Args:
+            audio_np: Input audio array
+            speed_factor: Speed adjustment (0.75 = 25% slower, 1.25 = 25% faster)
+            sample_rate: Sample rate of the audio
+
+        Returns:
+            Speed-adjusted audio array
+        """
+        if speed_factor == 1.0:
+            return audio_np  # No change needed
+
+        # Calculate new length
+        original_length = len(audio_np)
+        target_length = int(original_length / speed_factor)
+
+        # Use linear interpolation for time-stretching
+        # This is a simple approach that works reasonably well for small speed changes
+        original_indices = np.arange(original_length)
+        target_indices = np.linspace(0, original_length - 1, target_length)
+
+        # Interpolate the audio to the new length
+        adjusted_audio = np.interp(target_indices, original_indices, audio_np)
+
+        logger.info(f"Adjusted voice speed by factor {speed_factor:.2f} ({original_length} -> {target_length} samples)")
+
+        return adjusted_audio.astype(np.float32)
+
+    def _prepare_audio_from_comfyui(self, voice_audio, target_sample_rate: int = 24000, speed_factor: float = 1.0) -> Optional[np.ndarray]:
         """Prepare audio from ComfyUI format to numpy array"""
         if voice_audio is None:
             return None
@@ -834,7 +864,16 @@ class BaseVibeVoiceNode:
             audio_max = np.abs(audio_np).max()
             if audio_max > 0:
                 audio_np = audio_np / max(audio_max, 1.0)  # Normalize
-            
+
+            # Apply speed adjustment if requested
+            if speed_factor != 1.0:
+                audio_np = self._adjust_voice_speed(audio_np, speed_factor, target_sample_rate)
+                speed_percent = int((speed_factor - 1.0) * 100)
+                if speed_percent > 0:
+                    logger.info(f"Applied voice speed adjustment: +{speed_percent}% faster")
+                else:
+                    logger.info(f"Applied voice speed adjustment: {speed_percent}% slower")
+
             return audio_np.astype(np.float32)
         
         return None

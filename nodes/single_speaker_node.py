@@ -35,8 +35,8 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                     "dynamicPrompts": True
                 }),
                 "model": (["VibeVoice-1.5B", "VibeVoice-Large", "VibeVoice-Large-Quant-4Bit"], {
-                    "default": "VibeVoice-1.5B", 
-                    "tooltip": "Model to use. 1.5B is faster, Large has better quality, Quant-4Bit uses less VRAM (CUDA only)"
+                    "default": "VibeVoice-1.5B",
+                    "tooltip": "Model to use. 1.5B is faster, Large has better quality, Quant-4Bit uses ~7GB VRAM (CUDA only)"
                 }),
                 "attention_type": (["auto", "eager", "sdpa", "flash_attention_2", "sage"], {
                     "default": "auto",
@@ -54,6 +54,13 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                 "temperature": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 2.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Only used when sampling is enabled"}),
                 "max_words_per_chunk": ("INT", {"default": 250, "min": 100, "max": 500, "step": 50, "tooltip": "Maximum words per chunk for long texts. Lower values prevent speed issues but create more chunks."}),
+                "voice_speed_factor": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.8,
+                    "max": 1.2,
+                    "step": 0.01,
+                    "tooltip": "1.0 = normal speed, <1.0 = slower speed, >1.0 = faster speed"
+                }),
             }
         }
 
@@ -63,12 +70,12 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
     CATEGORY = "VibeVoiceWrapper"
     DESCRIPTION = "Generate speech from text using Microsoft VibeVoice with optional voice cloning"
 
-    def _prepare_voice_samples(self, speakers: list, voice_to_clone) -> List[np.ndarray]:
+    def _prepare_voice_samples(self, speakers: list, voice_to_clone, voice_speed_factor: float = 1.0) -> List[np.ndarray]:
         """Prepare voice samples from input audio or create synthetic ones"""
-        
+
         if voice_to_clone is not None:
-            # Use the base class method to prepare audio
-            audio_np = self._prepare_audio_from_comfyui(voice_to_clone)
+            # Use the base class method to prepare audio with speed adjustment
+            audio_np = self._prepare_audio_from_comfyui(voice_to_clone, speed_factor=voice_speed_factor)
             if audio_np is not None:
                 return [audio_np]
         
@@ -85,7 +92,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                        diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
                        use_sampling: bool = False, voice_to_clone=None, lora=None,
                        temperature: float = 0.95, top_p: float = 0.95,
-                       max_words_per_chunk: int = 250):
+                       max_words_per_chunk: int = 250, voice_speed_factor: float = 1.0):
         """Generate speech from text using VibeVoice"""
         
         try:
@@ -154,7 +161,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                             
                             # Create voice samples on first text segment
                             if voice_samples is None:
-                                voice_samples = self._prepare_voice_samples(speakers, voice_to_clone)
+                                voice_samples = self._prepare_voice_samples(speakers, voice_to_clone, voice_speed_factor)
                             
                             # Generate audio for this chunk
                             chunk_audio = self._generate_with_vibevoice(
@@ -174,7 +181,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                         
                         # Create voice samples on first text segment
                         if voice_samples is None:
-                            voice_samples = self._prepare_voice_samples(speakers, voice_to_clone)
+                            voice_samples = self._prepare_voice_samples(speakers, voice_to_clone, voice_speed_factor)
                         
                         # Generate audio
                         segment_audio = self._generate_with_vibevoice(

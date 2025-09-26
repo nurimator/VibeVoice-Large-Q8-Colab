@@ -2,13 +2,14 @@
 
 A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech model, enabling high-quality single and multi-speaker voice synthesis directly within your ComfyUI workflows.
 
-## Features
+## ✨ Features
 
 ### Core Functionality
 - 🎤 **Single Speaker TTS**: Generate natural speech with optional voice cloning
 - 👥 **Multi-Speaker Conversations**: Support for up to 4 distinct speakers
 - 🎯 **Voice Cloning**: Clone voices from audio samples
 - 🎨 **LoRA Support**: Fine-tune voices with custom LoRA adapters (v1.4.0+)
+- 🎚️ **Voice Speed Control**: Adjust speech rate by modifying reference voice speed (v1.5.0+)
 - 📝 **Text File Loading**: Load scripts from text files
 - 📚 **Automatic Text Chunking**: Handles long texts seamlessly with configurable chunk size
 - ⏸️ **Custom Pause Tags**: Insert silences with `[pause]` and `[pause:ms]` tags (wrapper feature)
@@ -36,7 +37,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 🖥️ **Cross-Platform**: Works on Windows, Linux, and macOS
 - 🎮 **Multi-Backend**: Supports CUDA, CPU, and MPS (Apple Silicon)
 
-## Video Demo
+## 🎥 Video Demo
 <p align="center">
   <a href="https://www.youtube.com/watch?v=fIBMepIBKhI">
     <img src="https://img.youtube.com/vi/fIBMepIBKhI/maxresdefault.jpg" alt="VibeVoice ComfyUI Wrapper Demo" />
@@ -45,7 +46,7 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
   <strong>Click to watch the demo video</strong>
 </p>
 
-## Installation
+## 📦 Installation
 
 ### Automatic Installation (Recommended)
 1. Clone this repository into your ComfyUI custom nodes folder:
@@ -56,7 +57,7 @@ git clone https://github.com/Enemyx-net/VibeVoice-ComfyUI
 
 2. Restart ComfyUI - the nodes will automatically install requirements on first use
 
-## Available Nodes
+## 🔧 Available Nodes
 
 ### 1. VibeVoice Load Text From File
 Loads text content from files in ComfyUI's input/output/temp directories.
@@ -83,6 +84,7 @@ Generates speech from text using a single voice.
   - `temperature`: Sampling temperature (0.1-2.0, default: 0.95)
   - `top_p`: Nucleus sampling parameter (0.1-1.0, default: 0.95)
   - `max_words_per_chunk`: Maximum words per chunk for long texts (100-500, default: 250)
+  - `voice_speed_factor`: Speech rate adjustment (0.8-1.2, default: 1.0, step: 0.01)
 
 ### 3. VibeVoice Multiple Speakers
 Generates multi-speaker conversations with distinct voices.
@@ -103,6 +105,7 @@ Generates multi-speaker conversations with distinct voices.
   - `lora`: LoRA configuration from VibeVoice LoRA node
   - `temperature`: Sampling temperature (0.1-2.0, default: 0.95)
   - `top_p`: Nucleus sampling parameter (0.1-1.0, default: 0.95)
+  - `voice_speed_factor`: Speech rate adjustment for all speakers (0.8-1.2, default: 1.0, step: 0.01)
 
 ### 4. VibeVoice Free Memory
 Manually frees all loaded VibeVoice models from memory.
@@ -125,7 +128,7 @@ Configure and load custom LoRA adapters for fine-tuned VibeVoice models.
 - **Output**: `lora` - LoRA configuration to connect to speaker nodes
 - **Usage**: `[VibeVoice LoRA] → [Single/Multiple Speaker Node]`
 
-## Multi-Speaker Text Format
+## 💬 Multi-Speaker Text Format
 
 For multi-speaker generation, format your text using the `[N]:` notation:
 
@@ -143,7 +146,7 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 - The system automatically detects the number of speakers from your text
 - Each speaker can have an optional voice sample for cloning
 
-## Model Information
+## 🧠 Model Information
 
 ### VibeVoice-1.5B
 - **Size**: ~5GB download
@@ -167,7 +170,7 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 
 Models are automatically downloaded on first use and cached in `ComfyUI/models/vibevoice/`.
 
-## Generation Modes
+## ⚙️ Generation Modes
 
 ### Deterministic Mode (Default)
 - `use_sampling = False`
@@ -180,7 +183,7 @@ Models are automatically downloaded on first use and cached in `ComfyUI/models/v
 - Uses temperature and top_p parameters
 - Good for creative exploration
 
-## Voice Cloning
+## 🎯 Voice Cloning
 
 To clone a voice:
 1. Connect an audio node to the `voice_to_clone` input (single speaker)
@@ -192,7 +195,7 @@ To clone a voice:
 - Minimum 3–10 seconds. Recommended at least 30 seconds for better quality
 - Automatically resampled to 24kHz
 
-## LoRA Support
+## 🎨 LoRA Support
 
 ### Overview
 Starting from version 1.4.0, VibeVoice ComfyUI supports custom LoRA (Low-Rank Adaptation) adapters for fine-tuning voice characteristics. This allows you to train and use specialized voice models while maintaining the base VibeVoice capabilities.
@@ -262,11 +265,53 @@ To create custom LoRA adapters for VibeVoice, use the official fine-tuning repos
 pip install transformers==4.51.3
 ```
 
-### Credits
+### 🙏 Credits
 
 LoRA implementation by [@jpgallegoar](https://github.com/jpgallegoar) (PR #127)
 
-## Pause Tags Support
+## 🎚️ Voice Speed Control
+
+### Overview
+The Voice Speed Control feature allows you to influence the speaking rate of generated speech by adjusting the speed of the reference voice. This feature modifies the input voice sample before processing, causing the model to learn and reproduce the altered speech rate.
+
+**Available from version 1.5.0**
+
+### How It Works
+The system applies time-stretching to the reference voice audio:
+- Values < 1.0 slow down the reference voice, resulting in slower generated speech
+- Values > 1.0 speed up the reference voice, resulting in faster generated speech
+- The model learns from the modified voice characteristics and generates speech at a similar pace
+
+### Usage
+- **Parameter**: `voice_speed_factor`
+- **Range**: 0.8 to 1.2
+- **Default**: 1.0 (normal speed)
+- **Step**: 0.01 (1% increments)
+
+### Recommended Settings
+- **Optimal Range**: 0.95 to 1.05 for natural-sounding results
+- **Slower Speech**: Try 0.95 (5% slower) or 0.97 (3% slower)
+- **Faster Speech**: Try 1.03 (3% faster) or 1.05 (5% faster)
+- **Best Results**: Provide reference audio of at least 20 seconds for more accurate speed matching
+
+### Important Notes
+- The effect works best with longer reference audio samples (20+ seconds recommended)
+- Extreme values (< 0.9 or > 1.1) may produce unnatural-sounding speech
+- In Multi Speaker mode, the speed adjustment applies to all speakers equally
+- Synthetic voices (when no audio is provided) are not affected by this parameter
+
+### 📖 Examples
+```
+# Single Speaker
+voice_speed_factor: 0.95  # Slightly slower, more deliberate speech
+voice_speed_factor: 1.05  # Slightly faster, more energetic speech
+
+# Multi Speaker
+voice_speed_factor: 0.98  # All speakers talk 2% slower
+voice_speed_factor: 1.02  # All speakers talk 2% faster
+```
+
+## ⏸️ Pause Tags Support
 
 ### Overview
 The VibeVoice wrapper includes a custom pause tag feature that allows you to insert silences between text segments. **This is NOT a standard Microsoft VibeVoice feature** - it's an original implementation of our wrapper to provide more control over speech pacing.
@@ -278,7 +323,7 @@ You can use two types of pause tags in your text:
 - `[pause]` - Inserts a 1-second silence (default)
 - `[pause:ms]` - Inserts a custom duration silence in milliseconds (e.g., `[pause:2000]` for 2 seconds)
 
-### Examples
+### 📖 Examples
 
 #### Single Speaker
 ```
@@ -314,7 +359,7 @@ This means:
 - Avoid pauses in the middle of phrases where context is important
 - Test different pause durations to find what sounds most natural
 
-## Tips for Best Results
+## 💡 Tips for Best Results
 
 1. **Text Preparation**:
    - Use proper punctuation for natural pauses
@@ -337,7 +382,7 @@ This means:
    - Subsequent runs use cached models
    - GPU recommended for faster inference
 
-## System Requirements
+## 💻 System Requirements
 
 ### Hardware
 - **Minimum**: 8GB VRAM for VibeVoice-1.5B
@@ -351,7 +396,7 @@ This means:
 - Transformers 4.51.3+
 - ComfyUI (latest version)
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Installation Issues
 - Ensure you're using ComfyUI's Python environment
@@ -368,7 +413,7 @@ This means:
 - Use 1.5B model for lower VRAM systems
 - Models use bfloat16 precision for efficiency
 
-## Examples
+## 📖 Examples
 
 ### Single Speaker
 ```
@@ -395,7 +440,7 @@ use_sampling: False
 [1]: Let's begin with the agenda.
 ```
 
-## Performance Benchmarks
+## 📊 Performance Benchmarks
 
 | Model                  | VRAM Usage | Context Length | Max Audio Duration |
 |------------------------|------------|----------------|-------------------|
@@ -403,14 +448,14 @@ use_sampling: False
 | VibeVoice-Large | ~17GB | 32K tokens | ~45 minutes |
 | VibeVoice-Large-Quant-4Bit | ~7GB | 32K tokens | ~45 minutes |
 
-## Known Limitations
+## ⚠️ Known Limitations
 
 - Maximum 4 speakers in multi-speaker mode
 - Works best with English and Chinese text
 - Some seeds may produce unstable output
 - Background music generation cannot be directly controlled
 
-## License
+## 📄 License
 
 This ComfyUI wrapper is released under the MIT License. See LICENSE file for details.
 
@@ -418,17 +463,17 @@ This ComfyUI wrapper is released under the MIT License. See LICENSE file for det
 - VibeVoice is for research purposes only
 - Check Microsoft's VibeVoice repository for full model license details
 
-## Links
+## 🔗 Links
 
 - [Original VibeVoice Repository](https://github.com/microsoft/VibeVoice) - Official Microsoft VibeVoice repository (currently unavailable)
 
-## Credits
+## 🙏 Credits
 
 - **VibeVoice Model**: Microsoft Research
 - **ComfyUI Integration**: Fabio Sarracino
 - **Base Model**: Built on Qwen2.5 architecture
 
-## Support
+## 💬 Support
 
 For issues or questions:
 1. Check the troubleshooting section
@@ -436,7 +481,7 @@ For issues or questions:
 3. Ensure VibeVoice is properly installed
 4. Open an issue with detailed error information
 
-## Contributing
+## 🤝 Contributing
 
 Contributions welcome! Please:
 1. Test changes thoroughly
@@ -444,7 +489,15 @@ Contributions welcome! Please:
 3. Update documentation as needed
 4. Submit pull requests with clear descriptions
 
-## Changelog
+## 📝 Changelog
+
+### Version 1.5.0
+- Added Voice Speed Control feature for adjusting speech rate
+  - New `voice_speed_factor` parameter in both Single and Multi Speaker nodes
+  - Time-stretching applied to reference audio to influence output speech rate
+  - Range: 0.8 to 1.2 with 0.01 step increments
+  - Recommended range: 0.95 to 1.05 for natural results
+  - Best results with 20+ seconds of reference audio
 
 ### Version 1.4.3
 - Improved LoRA system with better logging and compatibility checks
