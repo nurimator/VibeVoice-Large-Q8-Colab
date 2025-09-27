@@ -68,7 +68,7 @@ class VibeVoiceProcessor:
             with open(config_path, 'r') as f:
                 config = json.load(f)
         else:
-            logger.warning(f"No preprocessor_config.json found at {pretrained_model_name_or_path}, using defaults")
+            # No preprocessor_config.json found, using defaults silently
             config = {
                 "speech_tok_compress_ratio": 3200,
                 "db_normalize": True,
@@ -78,10 +78,33 @@ class VibeVoiceProcessor:
         speech_tok_compress_ratio = config.get("speech_tok_compress_ratio", 3200)
         db_normalize = config.get("db_normalize", True)
         
-        # Load tokenizer - try from model path first, then fallback to Qwen        
+        # Load tokenizer - try from model path first, then fallback to Qwen
         language_model_pretrained_name = config.get("language_model_pretrained_name", None) or kwargs.pop("language_model_pretrained_name", "Qwen/Qwen2.5-1.5B")
-        logger.info(f"Loading tokenizer from {language_model_pretrained_name}")
+        # Loading tokenizer
+
+        # Improved tokenizer type detection
+        # Check if it's a Qwen tokenizer by looking at the path OR by checking the tokenizer config
+        is_qwen_tokenizer = False
+
+        # First check: path contains 'qwen'
         if 'qwen' in language_model_pretrained_name.lower():
+            is_qwen_tokenizer = True
+        # Second check: if it's a local path, check the tokenizer_config.json
+        elif os.path.exists(language_model_pretrained_name):
+            tokenizer_config_path = os.path.join(language_model_pretrained_name, "tokenizer_config.json")
+            if os.path.exists(tokenizer_config_path):
+                try:
+                    import json
+                    with open(tokenizer_config_path, 'r') as f:
+                        tok_config = json.load(f)
+                        # Check if it's a Qwen tokenizer by looking at the tokenizer class or model type
+                        if 'Qwen' in tok_config.get('tokenizer_class', '') or 'qwen' in tok_config.get('model_type', '').lower():
+                            is_qwen_tokenizer = True
+                            # Detected Qwen tokenizer from config
+                except:
+                    pass
+
+        if is_qwen_tokenizer:
             tokenizer = VibeVoiceTextTokenizerFast.from_pretrained(
                 language_model_pretrained_name,
                 **kwargs

@@ -15,12 +15,6 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - ⏸️ **Custom Pause Tags**: Insert silences with `[pause]` and `[pause:ms]` tags (wrapper feature)
 - 🔄 **Node Chaining**: Connect multiple VibeVoice nodes for complex workflows
 - ⏹️ **Interruption Support**: Cancel operations before or between generations
-
-### Model Options
-- 🚀 **Three Model Variants**: 
-  - VibeVoice 1.5B (faster, lower memory)
-  - VibeVoice-Large (best quality, ~17GB VRAM)
-  - VibeVoice-Large-Quant-4Bit (balanced, ~7GB VRAM)
 - 🔧 **Flexible Configuration**: Control temperature, sampling, and guidance scale
 
 ### Performance & Optimization
@@ -57,6 +51,72 @@ git clone https://github.com/Enemyx-net/VibeVoice-ComfyUI
 
 2. Restart ComfyUI - the nodes will automatically install requirements on first use
 
+## 📥 Model Installation
+
+### Manual Download Required
+Starting from version 1.6.0, models and tokenizer must be manually downloaded and placed in the correct folder. The wrapper no longer downloads them automatically.
+
+### Download Links
+
+#### Models
+You can download VibeVoice models from HuggingFace:
+
+| Model | Size | Download Link |
+|-------|------|---------------|
+| **VibeVoice-1.5B** | ~5GB | [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B) |
+| **VibeVoice-Large** | ~17GB | [aoi-ot/VibeVoice-Large](https://huggingface.co/aoi-ot/VibeVoice-Large) |
+| **VibeVoice-Large-Quant-4Bit** | ~7GB | [DevParker/VibeVoice7b-low-vram](https://huggingface.co/DevParker/VibeVoice7b-low-vram) |
+
+#### Tokenizer (Required)
+VibeVoice uses the Qwen2.5-1.5B tokenizer:
+- Download from: [Qwen2.5-1.5B Tokenizer](https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main)
+- Required files: `tokenizer_config.json`, `vocab.json`, `merges.txt`, `tokenizer.json`
+
+### Installation Steps
+1. Create the models folder if it doesn't exist:
+   ```
+   ComfyUI/models/vibevoice/
+   ```
+
+2. Download and organize files in the vibevoice folder:
+   ```
+   ComfyUI/models/vibevoice/
+   ├── tokenizer/                 # Place Qwen tokenizer files here
+   │   ├── tokenizer_config.json
+   │   ├── vocab.json
+   │   ├── merges.txt
+   │   └── tokenizer.json
+   ├── VibeVoice-1.5B/           # Model folder
+   │   ├── config.json
+   │   ├── pytorch_model.bin     # or model.safetensors
+   │   └── ... (other model files)
+   ├── VibeVoice-Large/
+   │   └── ... (model files)
+   └── my-custom-vibevoice/      # custom names are supported
+       └── ... (model files)
+   ```
+
+3. For models downloaded from HuggingFace using git-lfs or the HF CLI, you can also use the cache structure:
+   ```
+   ComfyUI/models/vibevoice/
+   └── models--microsoft--VibeVoice-1.5B/
+       └── snapshots/
+           └── [hash]/
+               └── ... (model files)
+   ```
+
+4. Refresh your browser - the models will appear in the dropdown menu
+
+### Notes
+- The dropdown will show user-friendly names extracted from folder names
+- Both regular folders and HuggingFace cache structures are supported
+- Models are rescanned on every browser refresh
+- Quantized models are automatically detected from their config files
+- The tokenizer is searched in this priority order:
+  1. `ComfyUI/models/vibevoice/tokenizer/` (recommended)
+  2. `ComfyUI/models/vibevoice/models--Qwen--Qwen2.5-1.5B/` (if exists from previous installations)
+  3. HuggingFace cache (if available)
+
 ## 🔧 Available Nodes
 
 ### 1. VibeVoice Load Text From File
@@ -67,11 +127,11 @@ Loads text content from files in ComfyUI's input/output/temp directories.
 ### 2. VibeVoice Single Speaker
 Generates speech from text using a single voice.
 - **Text Input**: Direct text or connection from Load Text node
-- **Models**: VibeVoice-1.5B or VibeVoice-Large
+- **Models**: Select from available models in dropdown menu
 - **Voice Cloning**: Optional audio input for voice cloning
 - **Parameters** (in order):
   - `text`: Input text to convert to speech
-  - `model`: VibeVoice-1.5B, VibeVoice-Large or VibeVoice-Large-Quant-4Bit
+  - `model`: Select from dropdown list of available models found in `ComfyUI/models/vibevoice/`
   - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -93,7 +153,7 @@ Generates multi-speaker conversations with distinct voices.
 - **Recommended Model**: VibeVoice-Large for better multi-speaker quality
 - **Parameters** (in order):
   - `text`: Input text with speaker labels
-  - `model`: VibeVoice-1.5B, VibeVoice-Large or VibeVoice-Large-Quant-4Bit
+  - `model`: Select from dropdown list of available models found in `ComfyUI/models/vibevoice/`
   - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
@@ -418,7 +478,7 @@ This means:
 ### Single Speaker
 ```
 Text: "Welcome to our presentation. Today we'll explore the fascinating world of artificial intelligence."
-Model: VibeVoice-1.5B
+Model: [Select from available models]
 cfg_scale: 1.3
 use_sampling: False
 ```
@@ -490,6 +550,18 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## 📝 Changelog
+
+### Version 1.6.0
+- **Major Change**: Removed automatic model downloading from HuggingFace
+  - Models must now be manually downloaded and placed in `ComfyUI/models/vibevoice/`
+  - Dynamic model dropdown that scans available models on each browser refresh
+  - Support for custom folder names and HuggingFace cache structure
+  - Automatic detection of quantized models from config files
+  - Better user control over model management
+  - Eliminates authentication issues with private HuggingFace repos
+- **Improved Logging System**:
+  - Optimized logging to reduce console clutter
+  - Cleaner output for better user experience
 
 ### Version 1.5.0
 - Added Voice Speed Control feature for adjusting speech rate

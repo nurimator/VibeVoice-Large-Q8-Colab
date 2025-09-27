@@ -8,7 +8,7 @@ import numpy as np
 import re
 from typing import List, Optional
 
-from .base_vibevoice import BaseVibeVoiceNode
+from .base_vibevoice import BaseVibeVoiceNode, get_available_models
 
 # Setup logging
 logger = logging.getLogger("VibeVoice")
@@ -25,18 +25,23 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
     
     @classmethod
     def INPUT_TYPES(cls):
+        # Get available models dynamically
+        available_models = get_available_models()
+        model_choices = [display_name for _, display_name in available_models]
+        default_model = model_choices[0] if model_choices else "No models found"
+
         return {
             "required": {
                 "text": ("STRING", {
                     "multiline": True,
-                    "default": "Hello, this is a test of the VibeVoice text-to-speech system.", 
+                    "default": "Hello, this is a test of the VibeVoice text-to-speech system.",
                     "tooltip": "Text to convert to speech. Gets disabled when connected to another node.",
                     "forceInput": False,
                     "dynamicPrompts": True
                 }),
-                "model": (["VibeVoice-1.5B", "VibeVoice-Large", "VibeVoice-Large-Quant-4Bit"], {
-                    "default": "VibeVoice-1.5B",
-                    "tooltip": "Model to use. 1.5B is faster, Large has better quality, Quant-4Bit uses ~7GB VRAM (CUDA only)"
+                "model": (model_choices if model_choices else ["No models found"], {
+                    "default": default_model,
+                    "tooltip": "Select a model from ComfyUI/models/vibevoice/ folder"
                 }),
                 "attention_type": (["auto", "eager", "sdpa", "flash_attention_2", "sage"], {
                     "default": "auto",
@@ -102,9 +107,16 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
             else:
                 raise Exception("No text provided. Please enter text or connect from LoadTextFromFile node.")
             
-            # Get model mapping and prepare LoRA if provided
-            model_mapping = self._get_model_mapping()
-            model_path = model_mapping.get(model, model)
+            # Get the actual folder path for the selected model
+            available_models = get_available_models()
+            model_path = None
+            for folder, display_name in available_models:
+                if display_name == model:
+                    model_path = folder
+                    break
+
+            if not model_path:
+                raise Exception(f"Model '{model}' not found in models/vibevoice/")
 
             # Extract LoRA configuration if provided
             lora_path = None

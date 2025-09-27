@@ -8,7 +8,7 @@ import torch
 import numpy as np
 from typing import List, Optional
 
-from .base_vibevoice import BaseVibeVoiceNode
+from .base_vibevoice import BaseVibeVoiceNode, get_available_models
 
 # Setup logging
 logger = logging.getLogger("VibeVoice")
@@ -25,18 +25,26 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
     
     @classmethod
     def INPUT_TYPES(cls):
+        # Get available models dynamically
+        available_models = get_available_models()
+        model_choices = [display_name for _, display_name in available_models]
+        # Try to select Large model by default if available
+        default_model = "VibeVoice-Large"
+        if default_model not in model_choices:
+            default_model = model_choices[0] if model_choices else "No models found"
+
         return {
             "required": {
                 "text": ("STRING", {
                     "multiline": True,
-                    "default": "[1]: Hello, this is the first speaker.\n[2]: Hi there, I'm the second speaker.\n[1]: Nice to meet you!\n[2]: Nice to meet you too!", 
+                    "default": "[1]: Hello, this is the first speaker.\n[2]: Hi there, I'm the second speaker.\n[1]: Nice to meet you!\n[2]: Nice to meet you too!",
                     "tooltip": "Text with speaker labels. Use '[N]:' format where N is 1-4. Gets disabled when connected to another node.",
                     "forceInput": False,
                     "dynamicPrompts": True
                 }),
-                "model": (["VibeVoice-1.5B", "VibeVoice-Large", "VibeVoice-Large-Quant-4Bit"], {
-                    "default": "VibeVoice-Large",  # Large recommended for multi-speaker
-                    "tooltip": "Model to use. Large is recommended for multi-speaker generation, Quant-4Bit uses less VRAM (CUDA only)"
+                "model": (model_choices if model_choices else ["No models found"], {
+                    "default": default_model,
+                    "tooltip": "Select a model from ComfyUI/models/vibevoice/ folder. Large is recommended for multi-speaker"
                 }),
                 "attention_type": (["auto", "eager", "sdpa", "flash_attention_2", "sage"], {
                     "default": "auto",
@@ -196,9 +204,16 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
             # The processor uses the speaker labels in the text itself
             speakers = [f"Speaker {i}" for i in range(len(speakers_in_text))]
             
-            # Get model mapping and prepare LoRA if provided
-            model_mapping = self._get_model_mapping()
-            model_path = model_mapping.get(model, model)
+            # Get the actual folder path for the selected model
+            available_models = get_available_models()
+            model_path = None
+            for folder, display_name in available_models:
+                if display_name == model:
+                    model_path = folder
+                    break
+
+            if not model_path:
+                raise Exception(f"Model '{model}' not found in models/vibevoice/")
 
             # Extract LoRA configuration if provided
             lora_path = None

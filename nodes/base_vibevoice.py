@@ -8,7 +8,8 @@ import torch
 import numpy as np
 import re
 import gc
-from typing import List, Optional, Tuple, Any
+import json
+from typing import List, Optional, Tuple, Any, Dict
 
 # Setup logging
 logger = logging.getLogger("VibeVoice")
@@ -45,13 +46,369 @@ def get_device_map():
     # Note: device_map "auto" might work better for MPS in some cases
     return device if device != "mps" else "mps"
 
+# Cache for model scanning to avoid repeated scans
+_model_cache = {
+    "models": None,
+    "last_scan_time": 0,
+    "cache_duration": 5  # Cache for 5 seconds
+}
+
+def get_available_models() -> List[Tuple[str, str]]:
+    """Scan models/vibevoice/ directory and return available models
+
+    Returns:
+        List of tuples (display_name, folder_path)
+    """
+    import time
+
+    # Check if we have a valid cache
+    current_time = time.time()
+    if (_model_cache["models"] is not None and
+        current_time - _model_cache["last_scan_time"] < _model_cache["cache_duration"]):
+        # Return cached results
+        return _model_cache["models"]
+
+    try:
+        import folder_paths
+        models_dir = folder_paths.get_folder_paths("checkpoints")[0]
+        vibevoice_dir = os.path.join(os.path.dirname(models_dir), "vibevoice")
+
+        if not os.path.exists(vibevoice_dir):
+            os.makedirs(vibevoice_dir, exist_ok=True)
+            logger.info(f"Created vibevoice models directory: {vibevoice_dir}")
+            _model_cache["models"] = []
+            _model_cache["last_scan_time"] = current_time
+            return []
+
+        # First, collect all valid model folders
+        valid_folders = []
+        logger.debug(f"Scanning vibevoice directory: {vibevoice_dir}")
+        for folder in os.listdir(vibevoice_dir):
+            folder_path = os.path.join(vibevoice_dir, folder)
+
+            # Skip hidden folders, loras, and non-directories
+            if folder.startswith(".") or folder == "loras" or not os.path.isdir(folder_path):
+                logger.debug(f"Skipping: {folder}")
+                continue
+
+            logger.debug(f"Checking folder: {folder}")
+            # Check if it's a valid model folder
+            if is_valid_model_folder(folder_path):
+                valid_folders.append(folder)
+            else:
+                logger.debug(f"Folder {folder} is not a valid model folder")
+
+        # Now transform folder names with duplicate detection
+        models = []
+        for folder in valid_folders:
+            display_name = transform_folder_name(folder, valid_folders)
+            models.append((folder, display_name))
+            logger.debug(f"Found model: {display_name} in folder: {folder}")
+
+        # Sort by display name for consistent ordering
+        models.sort(key=lambda x: x[1])
+
+        if not models:
+            logger.warning("No valid models found in vibevoice directory")
+            logger.info(f"Please download models to: {vibevoice_dir}")
+        else:
+            # Single summary message instead of individual logs
+            logger.info(f"Found {len(models)} VibeVoice model(s) available")
+
+        # Cache the results
+        _model_cache["models"] = models
+        _model_cache["last_scan_time"] = current_time
+
+        return models
+
+    except Exception as e:
+        logger.error(f"Error scanning models directory: {e}")
+        # Cache empty result on error to avoid repeated failures
+        _model_cache["models"] = []
+        _model_cache["last_scan_time"] = current_time
+        return []
+
+def extract_model_info(folder: str) -> Tuple[str, Optional[str]]:
+    """Extract model name and author from folder name
+
+    Args:
+        folder: Folder name
+
+    Returns:
+        Tuple of (model_name, author_name)
+
+    Examples:
+        models--microsoft--VibeVoice-Large -> ('VibeVoice-Large', 'microsoft')
+        models--aoi-ot--VibeVoice-Large -> ('VibeVoice-Large', 'aoi-ot')
+        VibeVoice-1.5B -> ('VibeVoice-1.5B', None)
+    """
+    if "--" in folder:
+        # HuggingFace cache format: models--author--model
+        parts = folder.split("--")
+        if len(parts) >= 3:
+            author = parts[1]
+            model = parts[-1]
+            return model, author
+        elif len(parts) == 2:
+            return parts[-1], None
+    return folder, None
+
+def transform_folder_name(folder: str, all_folders: List[str]) -> str:
+    """Transform folder name for display, adding author if there are duplicates
+
+    Args:
+        folder: Current folder name
+        all_folders: List of all folder names to check for duplicates
+
+    Returns:
+        Display name with author in parentheses if needed
+    """
+    model_name, author = extract_model_info(folder)
+
+    # Check if there are other folders with the same model name
+    has_duplicate = False
+    for other_folder in all_folders:
+        if other_folder != folder:
+            other_model_name, _ = extract_model_info(other_folder)
+            if other_model_name == model_name:
+                has_duplicate = True
+                break
+
+    # Add author in parentheses if there are duplicates and author is known
+    if has_duplicate and author:
+        return f"{model_name} ({author})"
+
+    return model_name
+
+def check_folder_has_model_files(folder_path: str) -> bool:
+    """Check if a folder directly contains model files (not recursively)
+
+    Args:
+        folder_path: Path to check
+
+    Returns:
+        True if folder contains config.json and model files
+    """
+    if not os.path.isdir(folder_path):
+        return False
+
+    has_config = os.path.exists(os.path.join(folder_path, "config.json"))
+    if not has_config:
+        return False
+
+    # Check for various model file formats
+    files = os.listdir(folder_path)
+    has_model = (
+        "pytorch_model.bin" in files or
+        "model.safetensors" in files or
+        "pytorch_model.bin.index.json" in files or
+        "model.safetensors.index.json" in files or
+        any(f.startswith("pytorch_model-") and f.endswith(".bin") for f in files) or
+        any(f.startswith("model-") and f.endswith(".safetensors") for f in files)
+    )
+
+    return has_model
+
+def is_valid_model_folder(folder_path: str, max_depth: int = 4, current_depth: int = 0) -> bool:
+    """Recursively check if a folder contains a valid VibeVoice model
+
+    Args:
+        folder_path: Path to the folder to check
+        max_depth: Maximum recursion depth (default 3)
+        current_depth: Current recursion depth
+
+    Returns:
+        True if folder or any subfolder contains valid model files
+    """
+    if current_depth >= max_depth:
+        return False
+
+    # Check if current folder has model files
+    if check_folder_has_model_files(folder_path):
+        return True
+
+    # Recursively check subfolders
+    try:
+        for item in os.listdir(folder_path):
+            # Skip hidden folders and specific folders we want to ignore
+            if item.startswith(".") or item in ["loras", "__pycache__"]:
+                continue
+
+            item_path = os.path.join(folder_path, item)
+            if os.path.isdir(item_path):
+                # Recursively check subfolder
+                if is_valid_model_folder(item_path, max_depth, current_depth + 1):
+                    return True
+    except (PermissionError, OSError):
+        pass
+
+    return False
+
+def find_model_files_path_recursive(folder_path: str, max_depth: int = 4, current_depth: int = 0) -> Optional[str]:
+    """Recursively find the path containing model files
+
+    Args:
+        folder_path: Path to search from
+        max_depth: Maximum recursion depth
+        current_depth: Current recursion depth
+
+    Returns:
+        Path to the directory containing model files, or None
+    """
+    if current_depth >= max_depth:
+        return None
+
+    # Check if current folder has model files
+    if check_folder_has_model_files(folder_path):
+        return folder_path
+
+    # Recursively check subfolders
+    try:
+        for item in os.listdir(folder_path):
+            # Skip hidden folders and specific folders we want to ignore
+            if item.startswith(".") or item in ["loras", "__pycache__"]:
+                continue
+
+            item_path = os.path.join(folder_path, item)
+            if os.path.isdir(item_path):
+                # Recursively check subfolder
+                result = find_model_files_path_recursive(item_path, max_depth, current_depth + 1)
+                if result:
+                    return result
+    except (PermissionError, OSError):
+        pass
+
+    return None
+
+def find_model_files_path(model_folder: str) -> Optional[str]:
+    """Find the actual path containing model files
+
+    Args:
+        model_folder: Name of the folder in vibevoice directory
+
+    Returns:
+        Path to the directory containing model files, or None
+    """
+    try:
+        import folder_paths
+        models_dir = folder_paths.get_folder_paths("checkpoints")[0]
+        vibevoice_dir = os.path.join(os.path.dirname(models_dir), "vibevoice")
+        base_path = os.path.join(vibevoice_dir, model_folder)
+
+        # Use recursive search to find model files
+        result = find_model_files_path_recursive(base_path)
+
+        if result:
+            logger.info(f"Found model files at: {result}")
+        else:
+            logger.warning(f"No valid model files found for: {model_folder}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error finding model files: {e}")
+        return None
+
+def find_qwen_tokenizer_path(comfyui_models_dir: str) -> Optional[str]:
+    """Find Qwen tokenizer using priority system
+
+    Priority:
+    1. ComfyUI/models/vibevoice/tokenizer/
+    2. ComfyUI/models/vibevoice/models--Qwen--Qwen2.5-1.5B/
+    3. HuggingFace cache (if exists)
+
+    Returns:
+        Path to tokenizer directory or None
+    """
+    # Priority 1: Check tokenizer folder
+    tokenizer_dir = os.path.join(comfyui_models_dir, "tokenizer")
+    if os.path.exists(tokenizer_dir):
+        # Check if it contains tokenizer files
+        required_files = ["tokenizer_config.json", "vocab.json", "merges.txt"]
+        if all(os.path.exists(os.path.join(tokenizer_dir, f)) for f in required_files):
+            logger.info(f"Found Qwen tokenizer in: {tokenizer_dir}")
+            return tokenizer_dir
+
+    # Priority 2: Check models--Qwen--Qwen2.5-1.5B folder
+    qwen_model_dir = os.path.join(comfyui_models_dir, "models--Qwen--Qwen2.5-1.5B")
+    if os.path.exists(qwen_model_dir):
+        # Check snapshots folder
+        snapshots_dir = os.path.join(qwen_model_dir, "snapshots")
+        if os.path.exists(snapshots_dir):
+            for snapshot in os.listdir(snapshots_dir):
+                snapshot_path = os.path.join(snapshots_dir, snapshot)
+                if os.path.isdir(snapshot_path):
+                    # Check if it contains tokenizer files
+                    if os.path.exists(os.path.join(snapshot_path, "tokenizer_config.json")):
+                        logger.info(f"Found Qwen tokenizer in model cache: {snapshot_path}")
+                        return snapshot_path
+
+    # Priority 3: Check HuggingFace cache
+    hf_cache_paths = [
+        os.path.expanduser("~/.cache/huggingface/hub"),
+        os.path.join(os.environ.get("HF_HOME", ""), "hub") if os.environ.get("HF_HOME") else None,
+    ]
+
+    for cache_path in hf_cache_paths:
+        if cache_path and os.path.exists(cache_path):
+            qwen_cache = os.path.join(cache_path, "models--Qwen--Qwen2.5-1.5B")
+            if os.path.exists(qwen_cache):
+                snapshots_dir = os.path.join(qwen_cache, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    for snapshot in os.listdir(snapshots_dir):
+                        snapshot_path = os.path.join(snapshots_dir, snapshot)
+                        if os.path.isdir(snapshot_path):
+                            if os.path.exists(os.path.join(snapshot_path, "tokenizer_config.json")):
+                                logger.info(f"Found Qwen tokenizer in HF cache: {snapshot_path}")
+                                return snapshot_path
+
+    return None
+
+def detect_model_quantization(model_path: str) -> Optional[str]:
+    """Detect if model is quantized from config files
+
+    Args:
+        model_path: Path to the model directory
+
+    Returns:
+        '4bit', '8bit', or None
+    """
+    try:
+        # Check for quantization_config.json first
+        quant_config_path = os.path.join(model_path, "quantization_config.json")
+        if os.path.exists(quant_config_path):
+            with open(quant_config_path, 'r') as f:
+                quant_config = json.load(f)
+                if quant_config.get("load_in_4bit"):
+                    return "4bit"
+                if quant_config.get("load_in_8bit"):
+                    return "8bit"
+
+        # Check main config.json
+        config_path = os.path.join(model_path, "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+                if "quantization_config" in config:
+                    if config["quantization_config"].get("load_in_4bit"):
+                        return "4bit"
+                    if config["quantization_config"].get("load_in_8bit"):
+                        return "8bit"
+                    if config["quantization_config"].get("bits") == 4:
+                        return "4bit"
+
+    except Exception as e:
+        logger.debug(f"Could not detect quantization: {e}")
+
+    return None
+
 class BaseVibeVoiceNode:
     """Base class for VibeVoice nodes containing common functionality"""
     
     def __init__(self):
         self.model = None
         self.processor = None
-        self.current_model_path = None
+        self.current_model_folder = None
         self.current_attention_type = None
         self.current_lora_path = None
         # LoRA component flags (overridable by node instances)
@@ -71,7 +428,7 @@ class BaseVibeVoiceNode:
                 del self.processor
                 self.processor = None
             
-            self.current_model_path = None
+            self.current_model_folder = None
             
             # Force garbage collection and clear CUDA cache if available
             import gc
@@ -461,12 +818,12 @@ class BaseVibeVoiceNode:
             logger.error(f"Failed to apply SageAttention: {e}")
             logger.warning("Continuing with standard attention implementation")
     
-    def load_model(self, model_name: str, model_path: str, attention_type: str = "auto", lora_path: str = None):
+    def load_model(self, model_name: str, model_folder: str, attention_type: str = "auto", lora_path: str = None):
         """Load VibeVoice model with specified attention implementation and optional LoRA
 
         Args:
-            model_name: The display name of the model (e.g., "VibeVoice-Large-Quant-4Bit")
-            model_path: The HuggingFace model path
+            model_name: The display name of the model (e.g., "VibeVoice-Large")
+            model_folder: The folder name in models/vibevoice/ containing the model
             attention_type: The attention implementation to use
             lora_path: Optional path to LoRA adapter directory
         """
@@ -476,12 +833,12 @@ class BaseVibeVoiceNode:
         lora_changed = (current_lora or "") != (lora_path or "")
 
         if (self.model is None or
-            getattr(self, 'current_model_path', None) != model_path or
+            getattr(self, 'current_model_folder', None) != model_folder or
             current_attention != attention_type or
             lora_changed):
             
             # Free existing model before loading new one (important for attention type or LoRA changes)
-            if self.model is not None and (current_attention != attention_type or getattr(self, 'current_model_path', None) != model_path or lora_changed):
+            if self.model is not None and (current_attention != attention_type or getattr(self, 'current_model_folder', None) != model_folder or lora_changed):
                 logger.info(f"Freeing existing model before loading with new settings (attention: {current_attention} -> {attention_type}, LoRA: {current_lora} -> {lora_path})")
                 self.free_memory()
             
@@ -511,24 +868,35 @@ class BaseVibeVoiceNode:
                 transformers.logging.set_verbosity_error()
                 warnings.filterwarnings("ignore", category=UserWarning)
                 
-                # Check if model exists locally
-                model_dir = os.path.join(comfyui_models_dir, f"models--{model_path.replace('/', '--')}")
-                model_exists_in_comfyui = os.path.exists(model_dir)
+                # Get the actual model path using our discovery function
+                model_full_path = os.path.join(comfyui_models_dir, model_folder)
 
-                # Also check for direct local path format (for manual downloads)
-                snapshot_dir = None
-                if model_exists_in_comfyui:
-                    # Look for snapshot folder
-                    snapshots_dir = os.path.join(model_dir, "snapshots")
-                    if os.path.exists(snapshots_dir):
-                        # Get the most recent snapshot
-                        snapshots = [d for d in os.listdir(snapshots_dir) if os.path.isdir(os.path.join(snapshots_dir, d))]
-                        if snapshots:
-                            snapshot_dir = os.path.join(snapshots_dir, snapshots[0])
-                            logger.info(f"Found local model snapshot: {snapshot_dir}")
+                # Find where the actual model files are
+                model_files_path = find_model_files_path(model_folder)
+
+                if not model_files_path:
+                    raise Exception(f"No valid model files found in {model_full_path}. Please ensure the model is properly downloaded.")
+
+                logger.info(f"Found model files at: {model_files_path}")
+
+                # Check if model files are in a 4bit subfolder
+                use_4bit_subfolder = False
+                actual_model_path = model_files_path
+                if model_files_path.endswith(os.sep + "4bit"):
+                    # If files are in 4bit subfolder, use parent path and set subfolder
+                    actual_model_path = os.path.dirname(model_files_path)
+                    use_4bit_subfolder = True
+                    logger.info(f"Model uses 4bit subfolder structure")
+
+                # Detect if model is quantized
+                quantization = detect_model_quantization(model_files_path)
+                if quantization:
+                    logger.info(f"Detected {quantization} quantization")
                 
-                # Check if this is a quantized model based on the model name
-                is_quantized_4bit = "Quant-4Bit" in model_name
+                # Check if this is a quantized model
+                is_quantized_4bit = quantization == "4bit"
+                is_quantized_8bit = quantization == "8bit"
+                is_quantized = is_quantized_4bit or is_quantized_8bit
                 
                 # Prepare attention implementation kwargs
                 model_kwargs = {
@@ -538,31 +906,42 @@ class BaseVibeVoiceNode:
                     "device_map": get_device_map(),
                 }
                 
-                # Handle 4-bit quantized model loading
-                if is_quantized_4bit:
-                    # Check if CUDA is available (required for 4-bit quantization)
+                # Handle quantized model loading
+                if is_quantized_4bit or is_quantized_8bit:
+                    # Check if CUDA is available (required for quantization)
                     if not torch.cuda.is_available():
-                        raise Exception("4-bit quantized models require a CUDA GPU. Please use standard models on CPU/MPS.")
+                        raise Exception("Quantized models require a CUDA GPU. Please use standard models on CPU/MPS.")
 
                     # Try to import bitsandbytes
                     try:
                         from transformers import BitsAndBytesConfig
-                        logger.info("Loading 4-bit quantized model with bitsandbytes...")
 
-                        # Configure 4-bit quantization
-                        bnb_config = BitsAndBytesConfig(
-                            load_in_4bit=True,
-                            bnb_4bit_compute_dtype=torch.bfloat16,
-                            bnb_4bit_use_double_quant=True,
-                            bnb_4bit_quant_type='nf4'
-                        )
+                        if is_quantized_4bit:
+                            logger.info("Loading 4-bit quantized model with bitsandbytes...")
+                            # Configure 4-bit quantization
+                            bnb_config = BitsAndBytesConfig(
+                                load_in_4bit=True,
+                                bnb_4bit_compute_dtype=torch.bfloat16,
+                                bnb_4bit_use_double_quant=True,
+                                bnb_4bit_quant_type='nf4'
+                            )
+                            if use_4bit_subfolder:
+                                model_kwargs["subfolder"] = "4bit"
+                                logger.info("Using subfolder='4bit' for loading")
+                        else:  # 8-bit
+                            logger.info("Loading 8-bit quantized model with bitsandbytes...")
+                            # Configure 8-bit quantization
+                            bnb_config = BitsAndBytesConfig(
+                                load_in_8bit=True,
+                                bnb_8bit_compute_dtype=torch.bfloat16
+                            )
+
                         model_kwargs["quantization_config"] = bnb_config
-                        model_kwargs["device_map"] = "cuda"  # Force CUDA for 4-bit
-                        model_kwargs["subfolder"] = "4bit"  # Point to 4bit subfolder
+                        model_kwargs["device_map"] = "cuda"  # Force CUDA for quantized models
 
                     except ImportError:
                         raise Exception(
-                            "4-bit quantized models require 'bitsandbytes' library.\n"
+                            "Quantized models require 'bitsandbytes' library.\n"
                             "Please install it with: pip install bitsandbytes\n"
                             "Or use the standard VibeVoice models instead."
                         )
@@ -589,137 +968,156 @@ class BaseVibeVoiceNode:
                     # Auto mode - let transformers decide the best implementation
                     logger.info("Using auto attention implementation selection")
                 
-                # Try to load locally first
+                # Load the model from local path only
+                model_kwargs["local_files_only"] = True
+
                 try:
-                    if model_exists_in_comfyui and snapshot_dir:
-                        # Use direct local path to avoid HuggingFace API calls
-                        model_kwargs["local_files_only"] = True
-                        logger.info(f"Loading model from local snapshot: {snapshot_dir}")
-                        if is_quantized_4bit:
-                            logger.info(f"Using 4-bit quantization with subfolder: {model_kwargs.get('subfolder', 'None')}")
-                        # Use snapshot directory directly
-                        self.model = VibeVoiceInferenceModel.from_pretrained(
-                            snapshot_dir,
-                            **model_kwargs
-                        )
-                    elif model_exists_in_comfyui:
-                        # Try with HuggingFace ID but force local only
-                        model_kwargs["local_files_only"] = True
-                        logger.info(f"Loading model from local cache: {model_path}")
-                        if is_quantized_4bit:
-                            logger.info(f"Using 4-bit quantization with subfolder: {model_kwargs.get('subfolder', 'None')}")
-                        self.model = VibeVoiceInferenceModel.from_pretrained(
-                            model_path,
-                            **model_kwargs
-                        )
-                    else:
-                        raise FileNotFoundError("Model not found locally")
-                except (FileNotFoundError, OSError, Exception) as e:
-                    # Check if this is a 401 authorization error
-                    if "401" in str(e) or "Unauthorized" in str(e):
-                        logger.error(f"Authorization error accessing {model_path}")
-                        logger.error("Microsoft VibeVoice models may be private on HuggingFace.")
-                        logger.info("\nTo fix this issue, please manually download the model:")
-                        logger.info(f"1. Download the model files from an alternative source")
-                        logger.info(f"2. Place them in: {model_dir}/snapshots/[hash]/")
-                        logger.info(f"3. Ensure all files are present (config.json, pytorch_model.bin, etc.)")
-                        logger.info(f"4. Restart ComfyUI and try again")
-                        raise Exception(
-                            f"Authorization error: Cannot access {model_path} on HuggingFace.\n"
-                            f"The model appears to be private or restricted.\n"
-                            f"Please manually download and place the model files in:\n"
-                            f"{model_dir}"
-                        )
+                    # Use the correct path (parent if 4bit subfolder is used)
+                    logger.info(f"Loading model from: {actual_model_path}")
+                    if is_quantized:
+                        logger.info(f"Loading {quantization} quantized model...")
+                        if use_4bit_subfolder:
+                            logger.info(f"Using parent path with subfolder='4bit'")
 
-                    logger.info(f"Downloading {model_path}...")
-                    if is_quantized_4bit:
-                        logger.info(f"Downloading 4-bit quantized model with subfolder: {model_kwargs.get('subfolder', 'None')}")
-
-                    model_kwargs["local_files_only"] = False
                     self.model = VibeVoiceInferenceModel.from_pretrained(
-                        model_path,
+                        actual_model_path,
                         **model_kwargs
                     )
-                    elapsed = time.time() - start_time
-                else:
-                    elapsed = time.time() - start_time
-                
+                except Exception as e:
+                    logger.error(f"Failed to load model from {model_files_path}: {e}")
+                    raise Exception(
+                        f"Failed to load model from {model_files_path}.\n"
+                        f"Please ensure the model files are complete and properly downloaded.\n"
+                        f"Required files: config.json, pytorch_model.bin or model safetensors\n"
+                        f"Error: {str(e)}"
+                    )
+
+                elapsed = time.time() - start_time
+                logger.info(f"Model loaded in {elapsed:.2f} seconds")
+
                 # Verify model was loaded
                 if self.model is None:
                     raise Exception("Model failed to load - model is None after loading")
-                
+
                 # Load processor with proper error handling
                 from processor.vibevoice_processor import VibeVoiceProcessor
-                
-                # Prepare processor kwargs
+
+                logger.info("Loading VibeVoice processor...")
                 processor_kwargs = {
                     "trust_remote_code": True,
-                    "cache_dir": comfyui_models_dir
+                    "cache_dir": comfyui_models_dir,
+                    "local_files_only": True
                 }
-                
-                # Add subfolder for quantized models
-                if is_quantized_4bit:
+
+                # Add subfolder if needed
+                if use_4bit_subfolder:
                     processor_kwargs["subfolder"] = "4bit"
-                
+
+                # Pre-check for Qwen tokenizer - REQUIRED
+                tokenizer_path = find_qwen_tokenizer_path(comfyui_models_dir)
+                if not tokenizer_path:
+                    # Tokenizer is required - fail early with clear instructions
+                    logger.error("="*60)
+                    logger.error("QWEN TOKENIZER NOT FOUND!")
+                    logger.error("The VibeVoice processor requires the Qwen2.5-1.5B tokenizer.")
+                    logger.error("")
+                    logger.error("To fix this, please download the tokenizer:")
+                    logger.error("1. Download from: https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main")
+                    logger.error("   Required files: tokenizer_config.json, vocab.json, merges.txt, tokenizer.json")
+                    logger.error("2. Place files in ONE of these locations (in order of priority):")
+                    logger.error(f"   - {os.path.join(comfyui_models_dir, 'tokenizer')}/ (RECOMMENDED)")
+                    logger.error(f"   - {os.path.join(comfyui_models_dir, 'models--Qwen--Qwen2.5-1.5B')}/snapshots/[hash]/")
+                    logger.error("3. Restart ComfyUI and try again")
+                    logger.error("="*60)
+                    raise Exception(
+                        "Qwen tokenizer not found. Please download it manually.\n"
+                        "Download from: https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main\n"
+                        "Required files: tokenizer_config.json, vocab.json, merges.txt, tokenizer.json\n"
+                        f"Place files in: {os.path.join(comfyui_models_dir, 'tokenizer')}/"
+                    )
+
+                logger.info(f"Found tokenizer at: {tokenizer_path}")
+                # Override the language model path to use local tokenizer
+                processor_kwargs["language_model_pretrained_name"] = tokenizer_path
+
                 try:
-                    # First try with local files if model was loaded locally
-                    if model_exists_in_comfyui and snapshot_dir:
-                        # Use direct local path to avoid HuggingFace API calls
-                        processor_kwargs["local_files_only"] = True
-                        self.processor = VibeVoiceProcessor.from_pretrained(
-                            snapshot_dir,
-                            **processor_kwargs
-                        )
-                    elif model_exists_in_comfyui:
-                        processor_kwargs["local_files_only"] = True
-                        self.processor = VibeVoiceProcessor.from_pretrained(
-                            model_path,
-                            **processor_kwargs
-                        )
-                    else:
-                        # Download from HuggingFace
-                        self.processor = VibeVoiceProcessor.from_pretrained(
-                            model_path,
-                            **processor_kwargs
-                        )
+                    # Load processor from same path as model
+                    self.processor = VibeVoiceProcessor.from_pretrained(
+                        actual_model_path,
+                        **processor_kwargs
+                    )
                 except Exception as proc_error:
-                    logger.warning(f"Failed to load processor from {model_path}: {proc_error}")
-                    
+                    logger.warning(f"Failed to load processor from {model_files_path}: {proc_error}")
+
                     # Check if error is about missing Qwen tokenizer
-                    if "Qwen" in str(proc_error) and "tokenizer" in str(proc_error).lower():
-                        logger.info("Downloading required Qwen tokenizer files...")
-                        # The processor needs the Qwen tokenizer, ensure it's available
-                        try:
-                            from transformers import AutoTokenizer
-                            # Pre-download the Qwen tokenizer that VibeVoice depends on
-                            _ = AutoTokenizer.from_pretrained(
-                                "Qwen/Qwen2.5-1.5B",
-                                trust_remote_code=True,
-                                cache_dir=comfyui_models_dir
+                    if ("Qwen" in str(proc_error) or "tokenizer" in str(proc_error).lower()):
+                        logger.info("Processor needs Qwen tokenizer. Searching for tokenizer...")
+
+                        # Try to find tokenizer using priority system
+                        tokenizer_path = find_qwen_tokenizer_path(comfyui_models_dir)
+
+                        if tokenizer_path:
+                            logger.info(f"Found tokenizer at: {tokenizer_path}")
+                            # Try to load processor with tokenizer path hint
+                            try:
+                                from transformers import AutoTokenizer
+                                # Load tokenizer from the found path
+                                tokenizer = AutoTokenizer.from_pretrained(
+                                    tokenizer_path,
+                                    trust_remote_code=True,
+                                    local_files_only=True
+                                )
+                                logger.info("Qwen tokenizer loaded successfully from local path")
+                                # Store for later use if needed
+                                self._temp_tokenizer = tokenizer
+                            except Exception as tok_error:
+                                logger.warning(f"Failed to load tokenizer from {tokenizer_path}: {tok_error}")
+                        else:
+                            logger.error("="*60)
+                            logger.error("QWEN TOKENIZER NOT FOUND!")
+                            logger.error("The VibeVoice processor requires the Qwen2.5-1.5B tokenizer.")
+                            logger.error("")
+                            logger.error("To fix this, please download the tokenizer:")
+                            logger.error("1. Download from: https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main")
+                            logger.error("   Required files: tokenizer_config.json, vocab.json, merges.txt, tokenizer.json")
+                            logger.error("2. Place files in ONE of these locations:")
+                            logger.error(f"   - {os.path.join(comfyui_models_dir, 'tokenizer')}/")
+                            logger.error(f"   - {os.path.join(comfyui_models_dir, 'models--Qwen--Qwen2.5-1.5B')}/snapshots/[hash]/")
+                            logger.error("3. Restart ComfyUI and try again")
+                            logger.error("="*60)
+                            raise Exception(
+                                "Qwen tokenizer not found. Please download it manually.\n"
+                                "Download from: https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main\n"
+                                "Required files: tokenizer_config.json, vocab.json, merges.txt, tokenizer.json\n"
+                                f"Place tokenizer files in: {os.path.join(comfyui_models_dir, 'tokenizer')}/"
                             )
-                            logger.info("Qwen tokenizer downloaded, retrying processor load...")
-                        except Exception as tokenizer_error:
-                            logger.warning(f"Failed to download Qwen tokenizer: {tokenizer_error}")
                     
                     logger.info("Attempting to load processor with fallback method...")
                     
-                    # Fallback: try loading without local_files_only constraint
+                    # Fallback: try loading without subfolder
                     try:
+                        if "subfolder" in processor_kwargs:
+                            del processor_kwargs["subfolder"]
                         self.processor = VibeVoiceProcessor.from_pretrained(
-                            model_path,
-                            local_files_only=False,
-                            trust_remote_code=True,
-                            cache_dir=comfyui_models_dir
+                            model_files_path,
+                            **processor_kwargs
                         )
                     except Exception as fallback_error:
                         logger.error(f"Processor loading failed completely: {fallback_error}")
+                        # Check if it's still about Qwen tokenizer
+                        if "Qwen" in str(fallback_error):
+                            tokenizer_path = find_qwen_tokenizer_path(comfyui_models_dir)
+                            if not tokenizer_path:
+                                raise Exception(
+                                    f"Failed to load VibeVoice processor: Missing Qwen tokenizer.\n"
+                                    f"Download from: https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main\n"
+                                    f"Required files: tokenizer_config.json, vocab.json, merges.txt, tokenizer.json\n"
+                                    f"Place files in: {os.path.join(comfyui_models_dir, 'tokenizer')}/"
+                                )
+
                         raise Exception(
                             f"Failed to load VibeVoice processor. Error: {fallback_error}\n"
-                            f"This might be due to missing tokenizer files. Try:\n"
-                            f"1. Ensure you have internet connection for first-time download\n"
-                            f"2. Clear the ComfyUI/models/vibevoice folder and retry\n"
-                            f"3. Install transformers: pip install transformers>=4.51.3\n"
-                            f"4. Manually download Qwen tokenizer: from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B')"
+                            f"Please ensure transformers>=4.51.3 is installed."
                         )
                 
                 # Restore environment variables
@@ -734,7 +1132,7 @@ class BaseVibeVoiceNode:
                     del os.environ['HUGGINGFACE_HUB_CACHE']
                 
                 # Move to appropriate device (skip for quantized models as they use device_map)
-                if not is_quantized_4bit:
+                if not is_quantized:
                     device = get_optimal_device()
                     if device == "cuda":
                         self.model = self.model.cuda()
@@ -752,7 +1150,7 @@ class BaseVibeVoiceNode:
                 if lora_path and os.path.isdir(lora_path):
                     self._apply_lora(lora_path)
 
-                self.current_model_path = model_path
+                self.current_model_folder = model_folder
                 self.current_attention_type = attention_type
                 self.current_lora_path = lora_path
                 
@@ -877,14 +1275,6 @@ class BaseVibeVoiceNode:
             return audio_np.astype(np.float32)
         
         return None
-    
-    def _get_model_mapping(self) -> dict:
-        """Get model name mappings"""
-        return {
-            "VibeVoice-1.5B": "microsoft/VibeVoice-1.5B",
-            "VibeVoice-Large": "aoi-ot/VibeVoice-Large",
-            "VibeVoice-Large-Quant-4Bit": "DevParker/VibeVoice7b-low-vram"
-        }
     
     def _split_text_into_chunks(self, text: str, max_words: int = 250) -> List[str]:
         """Split long text into manageable chunks at sentence boundaries
