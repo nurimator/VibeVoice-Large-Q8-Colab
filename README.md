@@ -88,7 +88,8 @@ VibeVoice uses the Qwen2.5-1.5B tokenizer:
    │   └── tokenizer.json
    ├── VibeVoice-1.5B/           # Model folder
    │   ├── config.json
-   │   ├── pytorch_model.bin     # or model.safetensors
+   │   ├── model-00001-of-00003.safetensors
+   │   ├── model-00002-of-00003.safetensors
    │   └── ... (other model files)
    ├── VibeVoice-Large/
    │   └── ... (model files)
