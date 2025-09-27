@@ -552,6 +552,9 @@ Contributions welcome! Please:
 
 ## 📝 Changelog
 
+### Version 1.6.1
+- Improved integration by removing HuggingFace unnecessary settings
+
 ### Version 1.6.0
 - **Major Change**: Removed automatic model downloading from HuggingFace
   - Models must now be manually downloaded and placed in `ComfyUI/models/vibevoice/`

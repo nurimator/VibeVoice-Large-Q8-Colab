@@ -851,13 +851,6 @@ class BaseVibeVoiceNode:
                 comfyui_models_dir = os.path.join(os.path.dirname(models_dir), "vibevoice")
                 os.makedirs(comfyui_models_dir, exist_ok=True)
                 
-                # Force HuggingFace to use ComfyUI directory
-                original_hf_home = os.environ.get('HF_HOME')
-                original_hf_cache = os.environ.get('HUGGINGFACE_HUB_CACHE')
-                
-                os.environ['HF_HOME'] = comfyui_models_dir
-                os.environ['HUGGINGFACE_HUB_CACHE'] = comfyui_models_dir
-                
                 # Import time for timing
                 import time
                 start_time = time.time()
@@ -1119,17 +1112,6 @@ class BaseVibeVoiceNode:
                             f"Failed to load VibeVoice processor. Error: {fallback_error}\n"
                             f"Please ensure transformers>=4.51.3 is installed."
                         )
-                
-                # Restore environment variables
-                if original_hf_home is not None:
-                    os.environ['HF_HOME'] = original_hf_home
-                elif 'HF_HOME' in os.environ:
-                    del os.environ['HF_HOME']
-                    
-                if original_hf_cache is not None:
-                    os.environ['HUGGINGFACE_HUB_CACHE'] = original_hf_cache
-                elif 'HUGGINGFACE_HUB_CACHE' in os.environ:
-                    del os.environ['HUGGINGFACE_HUB_CACHE']
                 
                 # Move to appropriate device (skip for quantized models as they use device_map)
                 if not is_quantized:
