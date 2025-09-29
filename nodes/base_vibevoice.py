@@ -1029,9 +1029,40 @@ class BaseVibeVoiceNode:
                         f"Place files in: {os.path.join(comfyui_models_dir, 'tokenizer')}/"
                     )
 
-                logger.info(f"Found tokenizer at: {tokenizer_path}")
+                # Validate that all required tokenizer files exist
+                required_files = ["tokenizer_config.json", "vocab.json", "merges.txt"]
+                missing_files = []
+                for file_name in required_files:
+                    file_path = os.path.join(tokenizer_path, file_name)
+                    if not os.path.exists(file_path):
+                        missing_files.append(file_name)
+
+                if missing_files:
+                    logger.error("="*60)
+                    logger.error(f"TOKENIZER IS INCOMPLETE!")
+                    logger.error(f"Tokenizer folder found at: {tokenizer_path}")
+                    logger.error(f"But missing required files: {', '.join(missing_files)}")
+                    logger.error("")
+                    logger.error("Please download ALL required files from:")
+                    logger.error("https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main")
+                    logger.error("Required files:")
+                    logger.error("  - tokenizer_config.json")
+                    logger.error("  - vocab.json")
+                    logger.error("  - merges.txt")
+                    logger.error("  - tokenizer.json (optional but recommended)")
+                    logger.error("="*60)
+                    raise Exception(
+                        f"Tokenizer is incomplete. Missing files: {', '.join(missing_files)}\n"
+                        "Please download ALL required files from: https://huggingface.co/Qwen/Qwen2.5-1.5B/tree/main\n"
+                        "Required files: tokenizer_config.json, vocab.json, merges.txt, tokenizer.json\n"
+                        f"Place them in: {tokenizer_path}/"
+                    )
+
+                logger.info(f"Found complete tokenizer at: {tokenizer_path}")
                 # Override the language model path to use local tokenizer
                 processor_kwargs["language_model_pretrained_name"] = tokenizer_path
+                # Remove cache_dir to avoid HuggingFace cache interference
+                processor_kwargs.pop('cache_dir', None)
 
                 try:
                     # Load processor from same path as model

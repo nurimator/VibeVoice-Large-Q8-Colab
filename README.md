@@ -552,6 +552,12 @@ Contributions welcome! Please:
 
 ## 📝 Changelog
 
+### Version 1.6.2
+- Fixed tokenizer loading issue where HuggingFace cache could interfere with local files
+- Tokenizer now loads directly from specified path, avoiding cache conflicts
+- Added explicit file path loading for better reliability
+- Improved logging to show which tokenizer files are being used
+
 ### Version 1.6.1
 - Improved integration by removing HuggingFace unnecessary settings
 
