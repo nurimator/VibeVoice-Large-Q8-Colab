@@ -1,3 +1,6 @@
+# Original code by Microsoft
+# updated by Fabio Sarracino - Enemyx-net
+
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union, Callable
 from tqdm import tqdm
@@ -20,25 +23,39 @@ from transformers.utils import logging
 from .modular_vibevoice_tokenizer import VibeVoiceTokenizerStreamingCache, VibeVoiceAcousticTokenizerModel, VibeVoiceSemanticTokenizerModel
 from .modular_vibevoice_diffusion_head import VibeVoiceDiffusionHead
 
-# Import schedule module with explicit path handling to avoid conflicts
+# Import schedule module with robust path handling to avoid conflicts with PyPI 'schedule' package
 import sys
 import os
+
+# Get the path to vvembed directory
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 _vvembed_dir = os.path.dirname(_current_dir)
+_schedule_path = os.path.join(_vvembed_dir, 'schedule')
+
+# Ensure vvembed is at the front of sys.path to prioritize our schedule module
 if _vvembed_dir not in sys.path:
     sys.path.insert(0, _vvembed_dir)
+elif sys.path.index(_vvembed_dir) > 0:
+    # Move it to the front if it's not already
+    sys.path.remove(_vvembed_dir)
+    sys.path.insert(0, _vvembed_dir)
 
+# Verify the schedule module exists
+if not os.path.exists(_schedule_path):
+    raise ImportError(
+        f"Cannot find 'schedule' directory in vvembed. "
+        f"Expected at: {_schedule_path}"
+    )
+
+# Import with our schedule module prioritized
 try:
-    # Try to import our schedule module specifically
     from schedule.dpm_solver import DPMSolverMultistepScheduler
-except ImportError:
-    # If that fails, try with explicit path
-    _schedule_path = os.path.join(_vvembed_dir, 'schedule')
-    if os.path.exists(_schedule_path):
-        sys.path.insert(0, _vvembed_dir)
-        from schedule.dpm_solver import DPMSolverMultistepScheduler
-    else:
-        raise ImportError("Cannot find schedule module in vvembed")
+except ImportError as e:
+    raise ImportError(
+        f"Failed to import DPMSolverMultistepScheduler from {_schedule_path}. "
+        f"There might be a conflict with another Python package. "
+        f"Original error: {e}"
+    )
 
 from .configuration_vibevoice import VibeVoiceConfig
 
