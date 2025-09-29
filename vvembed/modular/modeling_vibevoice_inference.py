@@ -20,7 +20,26 @@ from transformers.utils import logging
 # from .modular_vibevoice_tokenizer import VibeVoiceTokenizerStreamingCache, VibeVoiceAcousticTokenizerModel, VibeVoiceSemanticTokenizerModel
 from .modular_vibevoice_tokenizer import VibeVoiceTokenizerStreamingCache, VibeVoiceTokenizerEncoderOutput
 from .modular_vibevoice_diffusion_head import VibeVoiceDiffusionHead
-from schedule.dpm_solver import DPMSolverMultistepScheduler
+
+# Import schedule module with explicit path handling to avoid conflicts
+import sys
+import os
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_vvembed_dir = os.path.dirname(_current_dir)
+if _vvembed_dir not in sys.path:
+    sys.path.insert(0, _vvembed_dir)
+
+try:
+    # Try to import our schedule module specifically
+    from schedule.dpm_solver import DPMSolverMultistepScheduler
+except ImportError:
+    # If that fails, try with explicit path
+    _schedule_path = os.path.join(_vvembed_dir, 'schedule')
+    if os.path.exists(_schedule_path):
+        sys.path.insert(0, _vvembed_dir)
+        from schedule.dpm_solver import DPMSolverMultistepScheduler
+    else:
+        raise ImportError("Cannot find schedule module in vvembed")
 
 from .configuration_vibevoice import VibeVoiceConfig
 
