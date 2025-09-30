@@ -410,6 +410,7 @@ class BaseVibeVoiceNode:
         self.processor = None
         self.current_model_folder = None
         self.current_attention_type = None
+        self.current_quantize_llm = "full precision"
         self.current_lora_path = None
         # LoRA component flags (overridable by node instances)
         self.use_llm_lora = True
@@ -429,6 +430,7 @@ class BaseVibeVoiceNode:
                 self.processor = None
             
             self.current_model_folder = None
+            self.current_quantize_llm = "full precision"
             
             # Force garbage collection and clear CUDA cache if available
             import gc
@@ -818,28 +820,32 @@ class BaseVibeVoiceNode:
             logger.error(f"Failed to apply SageAttention: {e}")
             logger.warning("Continuing with standard attention implementation")
     
-    def load_model(self, model_name: str, model_folder: str, attention_type: str = "auto", lora_path: str = None):
+    def load_model(self, model_name: str, model_folder: str, attention_type: str = "auto", quantize_llm: str = "full precision", lora_path: str = None):
         """Load VibeVoice model with specified attention implementation and optional LoRA
 
         Args:
             model_name: The display name of the model (e.g., "VibeVoice-Large")
             model_folder: The folder name in models/vibevoice/ containing the model
             attention_type: The attention implementation to use
+            quantize_llm: LLM quantization mode ("full precision", "8bit", or "4bit")
             lora_path: Optional path to LoRA adapter directory
         """
-        # Check if we need to reload model due to attention type or LoRA change
+        # Check if we need to reload model due to attention type, quantization, or LoRA change
         current_attention = getattr(self, 'current_attention_type', None)
+        current_quantize_llm = getattr(self, 'current_quantize_llm', 'full precision')
         current_lora = getattr(self, 'current_lora_path', None)
         lora_changed = (current_lora or "") != (lora_path or "")
+        quantize_changed = current_quantize_llm != quantize_llm
 
         if (self.model is None or
             getattr(self, 'current_model_folder', None) != model_folder or
             current_attention != attention_type or
+            quantize_changed or
             lora_changed):
             
-            # Free existing model before loading new one (important for attention type or LoRA changes)
-            if self.model is not None and (current_attention != attention_type or getattr(self, 'current_model_folder', None) != model_folder or lora_changed):
-                logger.info(f"Freeing existing model before loading with new settings (attention: {current_attention} -> {attention_type}, LoRA: {current_lora} -> {lora_path})")
+            # Free existing model before loading new one (important for attention type, quantization, or LoRA changes)
+            if self.model is not None and (current_attention != attention_type or quantize_changed or getattr(self, 'current_model_folder', None) != model_folder or lora_changed):
+                logger.info(f"Freeing existing model before loading with new settings (attention: {current_attention} -> {attention_type}, quantize: {current_quantize_llm} -> {quantize_llm}, LoRA: {current_lora} -> {lora_path})")
                 self.free_memory()
             
             try:
@@ -938,7 +944,40 @@ class BaseVibeVoiceNode:
                             "Please install it with: pip install bitsandbytes\n"
                             "Or use the standard VibeVoice models instead."
                         )
-                
+
+                # Handle LLM-only 4-bit quantization (for non-quantized models)
+                elif quantize_llm == "4bit" and not is_quantized:
+                    # Check if CUDA is available (required for quantization)
+                    if not torch.cuda.is_available():
+                        raise Exception("LLM quantization requires a CUDA GPU. Please use 'full precision' on CPU/MPS.")
+
+                    # Try to import bitsandbytes
+                    try:
+                        from transformers import BitsAndBytesConfig
+
+                        logger.info("Quantizing LLM component to 4-bit...")
+                        # Configure 4-bit quantization for LLM only
+                        # Note: lm_head must be skipped to avoid bitsandbytes assertion errors
+                        bnb_config = BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_compute_dtype=torch.bfloat16,
+                            bnb_4bit_use_double_quant=True,
+                            bnb_4bit_quant_type='nf4',
+                            # Skip lm_head and non-LLM components to avoid errors
+                            llm_int8_skip_modules=["lm_head", "prediction_head", "acoustic_connector", "semantic_connector", "diffusion_head"]
+                        )
+
+                        model_kwargs["quantization_config"] = bnb_config
+                        model_kwargs["device_map"] = "auto"
+                        logger.info("LLM will be quantized to 4-bit, diffusion head and connectors remain at full precision")
+
+                    except ImportError:
+                        raise Exception(
+                            "LLM quantization requires 'bitsandbytes' library.\n"
+                            "Please install it with: pip install bitsandbytes\n"
+                            "Or use 'full precision' mode instead."
+                        )
+
                 # Set attention implementation based on user selection
                 use_sage_attention = False
                 if attention_type == "sage":
@@ -1145,7 +1184,9 @@ class BaseVibeVoiceNode:
                         )
                 
                 # Move to appropriate device (skip for quantized models as they use device_map)
-                if not is_quantized:
+                # Skip device movement for both pre-quantized models and LLM-quantized models
+                is_llm_quantized = quantize_llm != "full precision"
+                if not is_quantized and not is_llm_quantized:
                     device = get_optimal_device()
                     if device == "cuda":
                         self.model = self.model.cuda()
@@ -1165,6 +1206,7 @@ class BaseVibeVoiceNode:
 
                 self.current_model_folder = model_folder
                 self.current_attention_type = attention_type
+                self.current_quantize_llm = quantize_llm
                 self.current_lora_path = lora_path
                 
             except Exception as e:

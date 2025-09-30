@@ -47,6 +47,10 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                     "default": "auto",
                     "tooltip": "Attention implementation. Auto selects the best available, eager is standard, sdpa is optimized PyTorch, flash_attention_2 requires compatible GPU, sage uses quantized attention for speedup (CUDA only)"
                 }),
+                "quantize_llm": (["full precision", "4bit"], {
+                    "default": "full precision",
+                    "tooltip": "Dynamically quantize only the LLM component for non-quantized models. 4bit: significantly faster generation with major VRAM savings and minimal quality loss. Full precision: original quality. Note: ignored for pre-quantized models. Requires CUDA GPU."
+                }),
                 "free_memory_after_generate": ("BOOLEAN", {"default": True, "tooltip": "Free model from memory after generation to save VRAM/RAM. Disable to keep model loaded for faster subsequent generations"}),
                 "diffusion_steps": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1, "tooltip": "Number of denoising steps. More steps = theoretically better quality but slower. Default: 20"}),
                 "seed": ("INT", {"default": 42, "min": 0, "max": 2**32-1, "tooltip": "Random seed for generation. Default 42 is used in official examples"}),
@@ -93,7 +97,8 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
         return voice_samples
     
     def generate_speech(self, text: str = "", model: str = "VibeVoice-1.5B",
-                       attention_type: str = "auto", free_memory_after_generate: bool = True,
+                       attention_type: str = "auto", quantize_llm: str = "full precision",
+                       free_memory_after_generate: bool = True,
                        diffusion_steps: int = 20, seed: int = 42, cfg_scale: float = 1.3,
                        use_sampling: bool = False, voice_to_clone=None, lora=None,
                        temperature: float = 0.95, top_p: float = 0.95,
@@ -135,7 +140,7 @@ class VibeVoiceSingleSpeakerNode(BaseVibeVoiceNode):
                     logger.info(f"Using LoRA from: {lora_path}")
 
             # Load model with optional LoRA
-            self.load_model(model, model_path, attention_type, lora_path=lora_path)
+            self.load_model(model, model_path, attention_type, quantize_llm=quantize_llm, lora_path=lora_path)
             
             # For single speaker, we just use ["Speaker 1"]
             speakers = ["Speaker 1"]

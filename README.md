@@ -134,6 +134,7 @@ Generates speech from text using a single voice.
   - `text`: Input text to convert to speech
   - `model`: Select from dropdown list of available models found in `ComfyUI/models/vibevoice/`
   - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
+  - `quantize_llm`: Dynamically quantize only the LLM component for non-quantized models. Options: "full precision" (default) or "4bit". 4-bit provides significantly faster generation with major VRAM savings and minimal quality loss. Requires CUDA GPU. Ignored for pre-quantized models.
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
   - `seed`: Random seed for reproducibility (default: 42)
@@ -156,6 +157,7 @@ Generates multi-speaker conversations with distinct voices.
   - `text`: Input text with speaker labels
   - `model`: Select from dropdown list of available models found in `ComfyUI/models/vibevoice/`
   - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
+  - `quantize_llm`: Dynamically quantize only the LLM component for non-quantized models. Options: "full precision" (default) or "4bit". 4-bit provides significantly faster generation with major VRAM savings and minimal quality loss. Requires CUDA GPU. Ignored for pre-quantized models.
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
   - `seed`: Random seed for reproducibility (default: 42)
@@ -551,6 +553,17 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## 📝 Changelog
+
+### Version 1.7.0
+- Added dynamic LLM-only 4-bit quantization for non-quantized models
+  - New `quantize_llm` parameter in both Single and Multiple Speaker nodes
+  - Options: "full precision" (default) or "4bit"
+  - Quantizes only the language model component while keeping diffusion head at full precision
+  - Significantly faster generation with major VRAM savings
+  - Minimal quality loss compared to full precision
+  - Requires CUDA GPU for quantization
+  - Automatically ignored for pre-quantized models
+  - Uses NF4 (4-bit NormalFloat) quantization type optimized for neural networks
 
 ### Version 1.6.3
 - Fixed tokenizer initialization error
