@@ -552,6 +552,13 @@ Contributions welcome! Please:
 
 ## 📝 Changelog
 
+### Version 1.6.3
+- Fixed tokenizer initialization error
+  - Resolved `TypeError: expected str, bytes or os.PathLike object, not NoneType` when loading processor
+  - Added robust fallback mechanism for tokenizer file path resolution
+  - Improved handling of vocab.json and merges.txt file loading
+  - Enhanced error handling for edge cases in tokenizer initialization
+
 ### Version 1.6.2
 - Fixed tokenizer loading issue where HuggingFace cache could interfere with local files
 - Tokenizer now loads directly from specified path, avoiding cache conflicts

@@ -1,3 +1,6 @@
+# Original code by Microsoft
+# updated by Fabio Sarracino - Enemyx-net
+
 import math
 import warnings
 from typing import List, Optional, Union, Dict, Any, Tuple
@@ -160,18 +163,48 @@ class VibeVoiceProcessor:
                         )
                 else:
                     # Files missing, try from_pretrained as fallback
-                    kwargs['local_files_only'] = True
-                    kwargs.pop('cache_dir', None)
+                    # BUT: first check if files exist with different check
+                    vocab_file = os.path.join(language_model_pretrained_name, "vocab.json")
+                    merges_file = os.path.join(language_model_pretrained_name, "merges.txt")
+
+                    if os.path.exists(vocab_file) and os.path.exists(merges_file):
+                        # Files exist but weren't caught by first check - use direct loading
+                        import logging
+                        logger = logging.getLogger("VibeVoice")
+                        logger.info(f"Retrying tokenizer load with explicit file paths")
+                        clean_kwargs = {k: v for k, v in kwargs.items()
+                                      if k not in ['cache_dir', 'local_files_only', 'trust_remote_code']}
+                        tokenizer = VibeVoiceTextTokenizerFast(
+                            vocab_file=vocab_file,
+                            merges_file=merges_file,
+                            **clean_kwargs
+                        )
+                    else:
+                        # Truly missing files
+                        kwargs['local_files_only'] = True
+                        kwargs.pop('cache_dir', None)
+                        tokenizer = VibeVoiceTextTokenizerFast.from_pretrained(
+                            language_model_pretrained_name,
+                            **kwargs
+                        )
+            else:
+                # Not a local directory, use standard from_pretrained
+                try:
                     tokenizer = VibeVoiceTextTokenizerFast.from_pretrained(
                         language_model_pretrained_name,
                         **kwargs
                     )
-            else:
-                # Not a local directory, use standard from_pretrained
-                tokenizer = VibeVoiceTextTokenizerFast.from_pretrained(
-                    language_model_pretrained_name,
-                    **kwargs
-                )
+                except Exception as e:
+                    # If from_pretrained fails, try with explicit parameters
+                    import logging
+                    logger = logging.getLogger("VibeVoice")
+                    logger.warning(f"Standard from_pretrained failed: {e}")
+                    logger.info("Trying with allow remote files...")
+                    kwargs['local_files_only'] = False  # Allow downloading
+                    tokenizer = VibeVoiceTextTokenizerFast.from_pretrained(
+                        language_model_pretrained_name,
+                        **kwargs
+                    )
         else:
             raise ValueError(f"Unsupported tokenizer type for {language_model_pretrained_name}. Supported types: Qwen, Llama, Gemma.")
         
