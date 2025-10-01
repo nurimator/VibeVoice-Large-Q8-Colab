@@ -9,6 +9,11 @@ from typing import Dict, Any, List
 # Setup logging
 logger = logging.getLogger("VibeVoice")
 
+# Cache for LoRA scanning to avoid repeated logs
+_lora_cache = {
+    "first_load_logged": False
+}
+
 def get_available_loras() -> List[str]:
     """Get list of available LoRA folders in ComfyUI/models/vibevoice/loras"""
     try:
@@ -37,9 +42,14 @@ def get_available_loras() -> List[str]:
                     if os.path.exists(adapter_config) or os.path.exists(adapter_model_st) or os.path.exists(adapter_model_bin):
                         lora_folders.append(item)
 
+        # Only log on first scan to avoid spam
+        if not _lora_cache["first_load_logged"]:
+            if not lora_folders:
+                logger.info("No LoRA adapters found in ComfyUI/models/vibevoice/loras")
+            _lora_cache["first_load_logged"] = True
+
         # Always include "None" option to disable LoRA
         if not lora_folders:
-            logger.info("No LoRA adapters found in ComfyUI/models/vibevoice/loras")
             return ["None"]
 
         # Sort alphabetically and add None option at the beginning

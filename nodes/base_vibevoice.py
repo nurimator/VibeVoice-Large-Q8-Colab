@@ -50,7 +50,8 @@ def get_device_map():
 _model_cache = {
     "models": None,
     "last_scan_time": 0,
-    "cache_duration": 5  # Cache for 5 seconds
+    "cache_duration": 5,  # Cache for 5 seconds
+    "first_load_logged": False  # Track if we've logged the initial scan
 }
 
 def get_available_models() -> List[Tuple[str, str]]:
@@ -108,12 +109,15 @@ def get_available_models() -> List[Tuple[str, str]]:
         # Sort by display name for consistent ordering
         models.sort(key=lambda x: x[1])
 
-        if not models:
-            logger.warning("No valid models found in vibevoice directory")
-            logger.info(f"Please download models to: {vibevoice_dir}")
-        else:
-            # Single summary message instead of individual logs
-            logger.info(f"Found {len(models)} VibeVoice model(s) available")
+        # Only log on first scan to avoid spam
+        if not _model_cache["first_load_logged"]:
+            if not models:
+                logger.warning("No valid models found in vibevoice directory")
+                logger.info(f"Please download models to: {vibevoice_dir}")
+            else:
+                # Single summary message instead of individual logs
+                logger.info(f"Found {len(models)} VibeVoice model(s) available")
+            _model_cache["first_load_logged"] = True
 
         # Cache the results
         _model_cache["models"] = models
