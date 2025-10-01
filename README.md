@@ -235,7 +235,7 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 - **Quality**: Identical to full precision - perfect audio preservation
 - **Use Case**: Production-quality audio with 12GB VRAM GPUs (RTX 3060, 4070 Ti, etc.)
 - **Quantization**: Selective 8-bit - only LLM quantized, audio components at full precision
-- **Note**: Optimized by Fabio Sarracino
+- **Note**: Quantized by Fabio Sarracino
 
 ### VibeVoice-Large-Q4
 - **Size**: ~6.6GB download
