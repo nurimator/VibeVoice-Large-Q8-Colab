@@ -23,7 +23,8 @@ A comprehensive ComfyUI integration for Microsoft's VibeVoice text-to-speech mod
 - 💾 **Memory Management**: Toggle automatic VRAM cleanup after generation
 - 🧹 **Free Memory Node**: Manual memory control for complex workflows
 - 🍎 **Apple Silicon Support**: Native GPU acceleration on M1/M2/M3 Macs via MPS
-- 🔢 **4-Bit Quantization**: Reduced memory usage with minimal quality loss
+- 🔢 **8-Bit Quantization**: Perfect audio quality with 40% VRAM reduction
+- 🔢 **4-Bit Quantization**: Maximum VRAM savings with minimal quality loss
 
 ### Compatibility & Installation
 - 📦 **Self-Contained**: Embedded VibeVoice code, no external dependencies
