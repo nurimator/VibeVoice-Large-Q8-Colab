@@ -704,6 +704,35 @@ class BaseVibeVoiceNode:
             logger.error(f"Traceback: {traceback.format_exc()}")
             # Don't fail the entire load, just log the error
 
+    def _verify_quantization(self, expected_mode: str):
+        """Verify that quantization was actually applied correctly"""
+        try:
+            quantized_layers = []
+            fp_layers = []
+
+            for name, module in self.model.named_modules():
+                if isinstance(module, torch.nn.Linear):
+                    module_type = type(module).__name__
+
+                    if 'Linear8bitLt' in module_type or '8bit' in module_type.lower():
+                        quantized_layers.append((name, '8bit'))
+                    elif 'Linear4bit' in module_type or '4bit' in module_type.lower():
+                        quantized_layers.append((name, '4bit'))
+                    else:
+                        fp_layers.append(name)
+
+            # Concise summary
+            total_linear = len(quantized_layers) + len(fp_layers)
+
+            if len(quantized_layers) > 0:
+                pct = 100 * len(quantized_layers) / total_linear
+                logger.info(f"✅ {expected_mode} quantization: {len(quantized_layers)}/{total_linear} layers ({pct:.1f}%)")
+            else:
+                logger.warning(f"⚠️ No {expected_mode} quantization detected")
+
+        except Exception as e:
+            logger.debug(f"Could not verify quantization: {e}")
+
     def _apply_sage_attention(self):
         """Apply SageAttention to the loaded model by monkey-patching attention layers"""
         try:
@@ -945,6 +974,51 @@ class BaseVibeVoiceNode:
                             "Or use the standard VibeVoice models instead."
                         )
 
+                # Handle LLM-only 8-bit quantization (for non-quantized models) - EXPERIMENTAL
+                elif quantize_llm == "8bit" and not is_quantized:
+                    # Check if CUDA is available (required for quantization)
+                    if not torch.cuda.is_available():
+                        raise Exception("LLM quantization requires a CUDA GPU. Please use 'full precision' on CPU/MPS.")
+
+                    # Try to import bitsandbytes
+                    try:
+                        from transformers import BitsAndBytesConfig
+
+                        logger.info("Quantizing LLM component to 8-bit...")
+                        # Configure 8-bit quantization for LLM only
+                        # CRITICAL: Must skip all audio-related components to prevent noise
+                        bnb_config = BitsAndBytesConfig(
+                            load_in_8bit=True,
+                            bnb_8bit_compute_dtype=torch.bfloat16,
+                            # Skip ALL audio-critical components (same as 4bit + more conservative)
+                            llm_int8_skip_modules=[
+                                "lm_head",              # Output projection
+                                "prediction_head",      # Diffusion head - CRITICAL for audio quality
+                                "acoustic_connector",   # Audio->LLM projection - CRITICAL
+                                "semantic_connector",   # Semantic->LLM projection - CRITICAL
+                                "acoustic_tokenizer",   # VAE encoder/decoder for audio
+                                "semantic_tokenizer",   # VAE encoder for semantics
+                            ],
+                            # Ultra-conservative outlier threshold (lower = more fp16 processing)
+                            # Default is 6.0, but audio/diffusion models need 3.0-4.0 for stability
+                            llm_int8_threshold=3.0,
+                            # Disable fp16 weights (use int8 storage)
+                            llm_int8_has_fp16_weight=False,
+                        )
+
+                        model_kwargs["quantization_config"] = bnb_config
+                        model_kwargs["device_map"] = "auto"
+
+                        # Flag for post-load verification
+                        model_kwargs["_quantization_mode"] = "8bit"
+
+                    except ImportError:
+                        raise Exception(
+                            "LLM quantization requires 'bitsandbytes' library.\n"
+                            "Please install it with: pip install bitsandbytes\n"
+                            "Or use 'full precision' mode instead."
+                        )
+
                 # Handle LLM-only 4-bit quantization (for non-quantized models)
                 elif quantize_llm == "4bit" and not is_quantized:
                     # Check if CUDA is available (required for quantization)
@@ -970,6 +1044,9 @@ class BaseVibeVoiceNode:
                         model_kwargs["quantization_config"] = bnb_config
                         model_kwargs["device_map"] = "auto"
                         logger.info("LLM will be quantized to 4-bit, diffusion head and connectors remain at full precision")
+
+                        # Flag for post-load verification
+                        model_kwargs["_quantization_mode"] = "4bit"
 
                     except ImportError:
                         raise Exception(
@@ -1003,6 +1080,9 @@ class BaseVibeVoiceNode:
                 # Load the model from local path only
                 model_kwargs["local_files_only"] = True
 
+                # Extract quantization mode flag before loading (it's not a model parameter)
+                quant_mode = model_kwargs.pop("_quantization_mode", None)
+
                 try:
                     # Use the correct path (parent if 4bit subfolder is used)
                     logger.info(f"Loading model from: {actual_model_path}")
@@ -1026,6 +1106,10 @@ class BaseVibeVoiceNode:
 
                 elapsed = time.time() - start_time
                 logger.info(f"Model loaded in {elapsed:.2f} seconds")
+
+                # Verify quantization if requested (quant_mode was extracted earlier)
+                if quant_mode:
+                    self._verify_quantization(quant_mode)
 
                 # Verify model was loaded
                 if self.model is None:
@@ -1602,7 +1686,7 @@ class BaseVibeVoiceNode:
                 # Check if we got actual audio output
                 if hasattr(output, 'speech_outputs') and output.speech_outputs:
                     speech_tensors = output.speech_outputs
-                    
+
                     if isinstance(speech_tensors, list) and len(speech_tensors) > 0:
                         audio_tensor = torch.cat(speech_tensors, dim=-1)
                     else:

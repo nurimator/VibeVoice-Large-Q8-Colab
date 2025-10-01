@@ -50,9 +50,9 @@ class VibeVoiceMultipleSpeakersNode(BaseVibeVoiceNode):
                     "default": "auto",
                     "tooltip": "Attention implementation. Auto selects the best available, eager is standard, sdpa is optimized PyTorch, flash_attention_2 requires compatible GPU, sage uses quantized attention for speedup (CUDA only)"
                 }),
-                "quantize_llm": (["full precision", "4bit"], {
+                "quantize_llm": (["full precision", "4bit", "8bit"], {
                     "default": "full precision",
-                    "tooltip": "Dynamically quantize only the LLM component for non-quantized models. 4bit: significantly faster generation with major VRAM savings and minimal quality loss. Full precision: original quality. Note: ignored for pre-quantized models. Requires CUDA GPU."
+                    "tooltip": "Dynamically quantize only the LLM component for non-quantized models. 4bit: major VRAM savings with minimal quality loss. 8bit: good balance of quality and memory usage. Full precision: original quality. Note: ignored for pre-quantized models. Requires CUDA GPU."
                 }),
                 "free_memory_after_generate": ("BOOLEAN", {"default": True, "tooltip": "Free model from memory after generation to save VRAM/RAM. Disable to keep model loaded for faster subsequent generations"}),
                 "diffusion_steps": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1, "tooltip": "Number of denoising steps. More steps = theoretically better quality but slower. Default: 20"}),

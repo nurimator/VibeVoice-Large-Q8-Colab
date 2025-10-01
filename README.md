@@ -61,11 +61,12 @@ Starting from version 1.6.0, models and tokenizer must be manually downloaded an
 #### Models
 You can download VibeVoice models from HuggingFace:
 
-| Model | Size | Download Link |
-|-------|------|---------------|
-| **VibeVoice-1.5B** | ~5GB | [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B) |
-| **VibeVoice-Large** | ~17GB | [aoi-ot/VibeVoice-Large](https://huggingface.co/aoi-ot/VibeVoice-Large) |
-| **VibeVoice-Large-Quant-4Bit** | ~7GB | [DevParker/VibeVoice7b-low-vram](https://huggingface.co/DevParker/VibeVoice7b-low-vram) |
+| Model                  | Size   | Download Link |
+|------------------------|--------|---------------|
+| **VibeVoice-1.5B**     | ~5.4GB | [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B) |
+| **VibeVoice-Large**    | ~18.7GB | [aoi-ot/VibeVoice-Large](https://huggingface.co/aoi-ot/VibeVoice-Large) |
+| **VibeVoice-Large-Q8** | ~11.6GB | [FabioSarracino/VibeVoice-Large-Q8](https://huggingface.co/FabioSarracino/VibeVoice-Large-Q8) |
+| **VibeVoice-Large-Q4** | ~6.6GB | [DevParker/VibeVoice7b-low-vram](https://huggingface.co/DevParker/VibeVoice7b-low-vram) |
 
 #### Tokenizer (Required)
 VibeVoice uses the Qwen2.5-1.5B tokenizer:
@@ -134,7 +135,7 @@ Generates speech from text using a single voice.
   - `text`: Input text to convert to speech
   - `model`: Select from dropdown list of available models found in `ComfyUI/models/vibevoice/`
   - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
-  - `quantize_llm`: Dynamically quantize only the LLM component for non-quantized models. Options: "full precision" (default) or "4bit". 4-bit provides significantly faster generation with major VRAM savings and minimal quality loss. Requires CUDA GPU. Ignored for pre-quantized models.
+  - `quantize_llm`: Dynamically quantize only the LLM component for non-quantized models. Options: "full precision" (default), "4bit", or "8bit". 4-bit provides major VRAM savings with minimal quality loss. 8-bit provides a good balance between quality and memory usage. Requires CUDA GPU. Ignored for pre-quantized models.
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
   - `seed`: Random seed for reproducibility (default: 42)
@@ -157,7 +158,7 @@ Generates multi-speaker conversations with distinct voices.
   - `text`: Input text with speaker labels
   - `model`: Select from dropdown list of available models found in `ComfyUI/models/vibevoice/`
   - `attention_type`: auto, eager, sdpa, flash_attention_2 or sage (default: auto)
-  - `quantize_llm`: Dynamically quantize only the LLM component for non-quantized models. Options: "full precision" (default) or "4bit". 4-bit provides significantly faster generation with major VRAM savings and minimal quality loss. Requires CUDA GPU. Ignored for pre-quantized models.
+  - `quantize_llm`: Dynamically quantize only the LLM component for non-quantized models. Options: "full precision" (default), "4bit", or "8bit". 4-bit provides major VRAM savings with minimal quality loss. 8-bit provides a good balance between quality and memory usage. Requires CUDA GPU. Ignored for pre-quantized models.
   - `free_memory_after_generate`: Free VRAM after generation (default: True)
   - `diffusion_steps`: Number of denoising steps (5-100, default: 20)
   - `seed`: Random seed for reproducibility (default: 42)
@@ -212,23 +213,35 @@ For multi-speaker generation, format your text using the `[N]:` notation:
 ## 🧠 Model Information
 
 ### VibeVoice-1.5B
-- **Size**: ~5GB download
+- **Size**: ~5.4GB download
+- **VRAM**: ~6GB
 - **Speed**: Faster inference
 - **Quality**: Good for single speaker
 - **Use Case**: Quick prototyping, single voices
 
 ### VibeVoice-Large
-- **Size**: ~17GB download
+- **Size**: ~18.7GB download
+- **VRAM**: ~20GB
 - **Speed**: Slower inference but optimized
-- **Quality**: Best available quality
+- **Quality**: Best available quality (full precision)
 - **Use Case**: Highest quality production, multi-speaker conversations
 - **Note**: Latest official release from Microsoft
 
-### VibeVoice-Large-Quant-4Bit
-- **Size**: ~7GB download
+### VibeVoice-Large-Q8
+- **Size**: ~11.6GB download (38% reduction from full model)
+- **VRAM**: ~12GB (40% reduction from full precision)
 - **Speed**: Balanced inference
-- **Quality**: Good quality
-- **Use Case**: Good quality production with less VRAM, multi-speaker conversations
+- **Quality**: Identical to full precision - perfect audio preservation
+- **Use Case**: Production-quality audio with 12GB VRAM GPUs (RTX 3060, 4070 Ti, etc.)
+- **Quantization**: Selective 8-bit - only LLM quantized, audio components at full precision
+- **Note**: Optimized by Fabio Sarracino
+
+### VibeVoice-Large-Q4
+- **Size**: ~6.6GB download
+- **VRAM**: ~8GB
+- **Speed**: Balanced inference
+- **Quality**: Good quality with minimal loss
+- **Use Case**: Maximum VRAM savings for lower-end GPUs
 - **Note**: Quantized by DevParker
 
 Models are automatically downloaded on first use and cached in `ComfyUI/models/vibevoice/`.
@@ -432,8 +445,9 @@ This means:
 
 2. **Model Selection**:
    - Use 1.5B for quick single-speaker tasks (fastest, ~8GB VRAM)
-   - Use Large for best quality and multi-speaker (~16GB VRAM)
-   - Use Large-Quant-4Bit for good quality and low VRAM usage (~7GB VRAM)
+   - Use Large for absolute best quality (~20GB VRAM)
+   - Use Large-Q8 for production quality with 12GB VRAM (perfect audio, 38% smaller)
+   - Use Large-Quant-4Bit for maximum VRAM savings (~7GB VRAM)
 
 3. **Seed Management**:
    - Default seed (42) works well for most cases
@@ -505,11 +519,12 @@ use_sampling: False
 
 ## 📊 Performance Benchmarks
 
-| Model                  | VRAM Usage | Context Length | Max Audio Duration |
-|------------------------|------------|----------------|-------------------|
-| VibeVoice-1.5B         | ~8GB | 64K tokens | ~90 minutes |
-| VibeVoice-Large | ~17GB | 32K tokens | ~45 minutes |
-| VibeVoice-Large-Quant-4Bit | ~7GB | 32K tokens | ~45 minutes |
+| Model              | VRAM Usage | Context Length | Max Audio Duration |
+|--------------------|------------|----------------|-------------------|
+| VibeVoice-1.5B     | ~6GB       | 64K tokens | ~90 minutes |
+| VibeVoice-Large | ~20GB      | 32K tokens | ~45 minutes |
+| VibeVoice-Large-Q8 | ~12GB      | 32K tokens | ~45 minutes |
+| VibeVoice-Large-Q4 | ~8GB       | 32K tokens | ~45 minutes |
 
 ## ⚠️ Known Limitations
 
@@ -553,6 +568,24 @@ Contributions welcome! Please:
 4. Submit pull requests with clear descriptions
 
 ## 📝 Changelog
+
+### Version 1.8.0
+- **New Official 8-bit Quantized Model**: VibeVoice-Large-Q8
+  - Released on HuggingFace: [FabioSarracino/VibeVoice-Large-Q8](https://huggingface.co/FabioSarracino/VibeVoice-Large-Q8)
+  - Model size: 11.6GB (38% reduction from 18.7GB full precision)
+  - VRAM usage: ~12GB (40% reduction from ~20GB)
+  - **Perfect audio quality**: Identical to full precision model - no quality degradation
+  - **Selective quantization approach**: audio-critical components (diffusion head, VAE, connectors) kept at full precision
+  - Optimized for 12GB VRAM GPUs (RTX 3060, 4070 Ti, etc.)
+  - Solves the common 8-bit "noise problem" by carefully selecting which components to quantize
+- **Added 8-bit Dynamic LLM Quantization**
+  - New "8bit" option in `quantize_llm` parameter for both Single and Multiple Speaker nodes
+  - Options now: "full precision" (default), "4bit", "8bit"
+  - Dynamically quantizes only the LLM component for non-quantized models
+  - Skips all audio-critical components (diffusion_head, acoustic/semantic connectors, tokenizers)
+  - Provides good balance between quality and VRAM savings
+  - Requires CUDA GPU and bitsandbytes library
+  - Automatically ignored for pre-quantized models
 
 ### Version 1.7.0
 - Added dynamic LLM-only 4-bit quantization for non-quantized models
