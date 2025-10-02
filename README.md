@@ -570,6 +570,10 @@ Contributions welcome! Please:
 
 ## 📝 Changelog
 
+### Version 1.8.1
+- Forced installation of the bitsandbytes>=0.48.1 library as version 0.48.0 has a critical bug that prevents the Q8 model from working.
+- Bug Fixing
+
 ### Version 1.8.0
 - **New Official 8-bit Quantized Model**: VibeVoice-Large-Q8
   - Released on HuggingFace: [FabioSarracino/VibeVoice-Large-Q8](https://huggingface.co/FabioSarracino/VibeVoice-Large-Q8)
