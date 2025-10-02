@@ -14,5 +14,5 @@ peft>=0.17.0
 huggingface_hub>=0.25.1
 absl-py
 aiortc
-bitsandbytes
+bitsandbytes==0.47.0
 protobuf
