@@ -23,30 +23,11 @@ VibeVoice is a novel framework designed for generating expressive, long-form, mu
 
 #### Option 1: Gradio Interface (Recommended)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_GITHUB_USERNAME/VibeVoice_Colab_4Q/blob/main/vibevoice_gradio_inference.ipynb)
-
-Modern web-based interface with all controls in one view.
-
-**Steps**:
-1. Click the badge above to open in Google Colab
-2. Run all cells (Runtime → Run all)
-3. Wait for the Gradio interface to launch and then click the link
-4. Upload voice samples (optional)
-5. Enter your text and adjust parameters
-6. Click "Generate Speech"
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nurimator/VibeVoice-Large-Q8-Colab/blob/main/vibevoice_gradio_inference.ipynb)
 
 #### Option 2: ipywidgets Interface
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_GITHUB_USERNAME/VibeVoice_Colab_4Q/blob/main/vibevoice_standalone_inference.ipynb)
-
-Native Jupyter interface with interactive widgets.
-
-**Steps**:
-1. Click the badge above to open in Google Colab
-2. Run cells 1-5 to setup and load the model
-3. Run cell 6 to upload voice samples
-4. Run cell 7 to display interactive controls
-5. Adjust parameters and run cell 8 to generate
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nurimator/VibeVoice-Large-Q8-Colab/blob/main/vibevoice_standalone_inference.ipynb)
 
 ## Features
 
