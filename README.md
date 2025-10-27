@@ -3,10 +3,6 @@
 
 VibeVoice is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio, such as podcasts, from text. It addresses significant challenges in traditional Text-to-Speech (TTS) systems, particularly in scalability, speaker consistency, and natural turn-taking.
 
-This repository provides easy-to-use Google Colab notebooks for VibeVoice TTS inference with two different interfaces:
-- **Gradio Interface** - Web-based UI with modern controls
-- **ipywidgets Interface** - Native Jupyter widgets for interactive control
-
 - **GPU Required**: This notebook requires a GPU to run. Free tier T4 GPU is sufficient.
 - **First Run**: Initial model download may take 3-5 minutes
 - **Generation Time**: Depends on text length and diffusion steps (typically 100-300 seconds)
@@ -76,39 +72,6 @@ Native Jupyter interface with interactive widgets.
 - Diffusion-based speech generation
 - Multi-speaker voice cloning capability
 - Custom voice embedding system
-
-## Available Notebooks
-
-### 1. Gradio Interface (`vibevoice_gradio_inference.ipynb`)
-
-Modern web-based interface with all controls in one view.
-
-**Features**:
-- Clean web UI with organized layout
-- 4-speaker voice upload in one row
-- Side-by-side parameter controls and text input
-- Real-time progress tracking
-- Shareable link for demos
-
-**Best for**: 
-- Demonstrations
-- Sharing with others
-- Production-like interface
-
-### 2. ipywidgets Interface (`vibevoice_standalone_inference.ipynb`)
-
-Native Jupyter interface with interactive widgets.
-
-**Features**:
-- Traditional notebook workflow
-- Dropdown menus for voice selection
-- Interactive sliders and controls
-- Step-by-step execution
-
-**Best for**:
-- Development and testing
-- Learning the workflow
-- Sequential execution
 
 ##  Usage Examples
 
